@@ -12,6 +12,7 @@ import {
 } from '@solana/spl-token'; 
 import { deriveBurner } from './logistics';
 import { Buffer } from 'buffer';
+window.Buffer = window.Buffer || Buffer;
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
