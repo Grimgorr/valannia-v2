@@ -107,9 +107,10 @@ export default function VistaMercado({ tokensConfig, burner, cuentas, triggerRef
           const category = getAttr('category') || 'NFTs · Core';
           const type     = getAttr('type') || 'Unknown';
           const key = `${displayName}__${type}`;
+          const collection = asset.grouping?.find(g => g.group_key === 'collection')?.group_value || null;
           // allAddresses: para saber qué asset específico vender cuando hay varios iguales
           if (coreMap[key]) { coreMap[key].cantidad += 1; coreMap[key].allAddresses.push(asset.id); }
-          else { coreMap[key] = { name: displayName, address: asset.id, allAddresses: [asset.id], category, subcategory: type, image, cantidad: 1, isNFT: true }; }
+          else { coreMap[key] = { name: displayName, address: asset.id, allAddresses: [asset.id], category, subcategory: type, image, cantidad: 1, isNFT: true, collection }; }
         });
         matList.push(...Object.values(coreMap));
       } catch (coreErr) { console.warn('[Axon] Core NFTs mercado error:', coreErr); }
@@ -153,6 +154,7 @@ export default function VistaMercado({ tokensConfig, burner, cuentas, triggerRef
         await transferV1(umi, {
           asset: umiPublicKey(assetToSell),
           newOwner: umiPublicKey(burner.publicKey.toBase58()),
+          ...(materialSeleccionadoObjeto.collection ? { collection: umiPublicKey(materialSeleccionadoObjeto.collection) } : {}),
         }).sendAndConfirm(umi);
         await addDoc(collection(db, "orders"), {
           id: Date.now(), sellerAddr: selectedCuenta,
@@ -164,6 +166,7 @@ export default function VistaMercado({ tokensConfig, burner, cuentas, triggerRef
           isNFT: true,
           category: materialSeleccionadoObjeto.category,
           subcategory: materialSeleccionadoObjeto.subcategory,
+          nftCollection: materialSeleccionadoObjeto.collection || null,
         });
       } else {
         // ── SPL clásico ─────────────────────────────────────────────────
@@ -207,6 +210,7 @@ export default function VistaMercado({ tokensConfig, burner, cuentas, triggerRef
         await transferV1(umi, {
           asset: umiPublicKey(orden.mint),
           newOwner: umiPublicKey(orden.sellerAddr),
+          ...(orden.nftCollection ? { collection: umiPublicKey(orden.nftCollection) } : {}),
         }).sendAndConfirm(umi);
       } else {
         // ── SPL clásico ─────────────────────────────────────────────────
@@ -254,6 +258,7 @@ export default function VistaMercado({ tokensConfig, burner, cuentas, triggerRef
         await transferV1(umi, {
           asset:    umiPublicKey(orden.mint),
           newOwner: umiPublicKey(burner.publicKey.toBase58()),
+          ...(orden.nftCollection ? { collection: umiPublicKey(orden.nftCollection) } : {}),
         }).sendAndConfirm(umi);
       } else {
         // SPL: transferir tokens del burner al comprador
