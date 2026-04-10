@@ -29,3 +29,7 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
+
+# Wrangler config (no publicar)
+wrangler.json
+wrangler.jsonc

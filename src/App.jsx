@@ -9,10 +9,10 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { transferV1, mplCore } from '@metaplex-foundation/mpl-core';
 import { publicKey as umiPublicKey, createSignerFromKeypair, signerIdentity } from '@metaplex-foundation/umi';
 
+import { deriveBurner } from './logistics';
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot } from "firebase/firestore";
 import logoImg from './Axon.png';
-import emblemImg from './Emblem2.png';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 // 🟢 AQUÍ CONECTAMOS TU NUEVO ARCHIVO DE ESTILOS 🟢
@@ -36,6 +36,7 @@ const db = getFirestore(app);
 const VALAN_MINT = "5cL3TVJ7p5ZKqyx16DXwpdcNx5u19vQtWujA9vYindi";
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const JSON_URL = "https://f-bopb.github.io/valannia-inventory-tracker/data/valanniaTokens.json";
+const CODIGO_BETA = "Valannia Tester";
 
 const DEV_FEE_WALLET = new PublicKey("5heGJeuvcpBzGs12ur6HdhsRUdbDB6xuS1rrGjRZCQsj");
 const TARGET_ADDRESS = "FutaNQMxqzyfScgW42Hbg71bPjkh5Rp7Tza4CiHFGoDT";
@@ -96,6 +97,8 @@ const useTranslation = () => useContext(LanguageContext);
 const TRANSLATIONS = {
   es: {
     menuInventory: "Inventario", menuMarket: "Mercado P2P", menuCrafting: "Héroes", menuRecipes: "Crafteo",
+    betaTitle: "Acceso Beta", betaDesc: "Introduce el código para acceder a la infraestructura de Axon.",
+    betaPlaceholder: "Código de acceso...", betaBtn: "Acceder", betaErr: "Código incorrecto.",
     burnExportAlert: "¡Clave Privada copiada al portapapeles!\n\nGuárdala en un lugar seguro.",
     burnCopyPubAlert: "Dirección pública copiada.", burnCreateBtn: "Activar Burner",
     burnConfirmMsg: "ATENCIÓN: Vas a borrar el Burner.\nEscribe 'BORRAR' para confirmar:",
@@ -117,31 +120,6 @@ const TRANSLATIONS = {
     mktCancelOk: "Orden cancelada.", fltAllCat: "Categorías", fltAllSub: "Subcategorías", fltAllItem: "Objetos", 
     fltClear: "Limpiar", mktFeeNote: "0% Fee de venta.", mktSellerWallet: "Wallet Origen", mktQtyToSell: "Cantidad", 
     mktReceiveExact: "Recibirás:", mktNoOrdersFlt: "No hay órdenes.", mktNoOrdersGlobal: "Sin ofertas públicas.",
-    mktBuyer: "Comprador", mktOrderBook: "Libro de Órdenes", mktSellOrders: "Órdenes de Venta", mktBuyOrders: "Órdenes de Compra",
-    mktOrderCount1: "orden", mktOrderCountN: "órdenes", mktNoSellOrders: "No hay órdenes de venta.", mktNoBuyOrders: "No hay órdenes de compra.",
-    mktSellDesc: "📤 Publicas un asset a la venta. El asset queda bloqueado en escrow hasta que alguien lo compre o canceles.",
-    mktBuyDesc: "📥 Publicas lo que quieres comprar. El SOL queda bloqueado como garantía. Cualquier vendedor puede aceptar.",
-    mktPayWallet: "Wallet de pago", mktWalletConnected: "Wallet conectada", mktSelectItem: "Selecciona un item...",
-    mktSellBtn: "📤 Publicar Venta", mktBuyBtn: "📥 Publicar Compra", mktProcessing: "⏳ Procesando...",
-    mktOrderVenta: "📤 Orden de Venta", mktOrderCompra: "📥 Orden de Compra",
-    mktOrdersVenta: "📤 Órdenes de Venta", mktOrdersCompra: "📥 Órdenes de Compra",
-    mktConfirmBuy: "¿Publicar orden de compra? Se bloquearán {sol} SOL en escrow hasta que se complete o canceles.",
-    mktBuyPublished: "✅ Orden de compra publicada. SOL bloqueado en escrow.", mktSaleComplete: "✅ Venta completada.",
-    mktSellBtn2: "⚡ Vender",
-    errConnectWallet: "Conecta tu wallet.", errConnectWalletSell: "Conecta tu wallet para vender.",
-    errConnectWalletLogistics: "Conecta tu wallet para ejecutar logística.",
-    errConnectWalletSign: "Conecta tu wallet para firmar.", errConnectOriginWallet: "Conecta la wallet origen.",
-    errConnectValannia: "Conecta Valannia primero.", errEscrow: "Error: escrow del worker no disponible.",
-    errCancelling: "Error cancelando:", errBuying: "Error comprando:", errValannia: "Error al conectar con Valannia:",
-    errMissingIngredients: "No se encontraron todos los ingredientes en el inventario de Valannia.",
-    errConnectAlias: "Conecta la wallet para enviar sus assets.",
-    navGuide: "📖 Guía", navGuideFooter: "📖 Guía & FAQs", heroesTitle: "Héroes", heroesSoon: "Próximamente", heroesDesc: "La integración de héroes estará disponible próximamente. Podrás ver tus héroes, gestionar crafts y mucho más.",
-    btnConnectValannia: "Conectar Valannia", btnDisconnectValannia: "Desconectar", btnConnecting: "Conectando...",
-    mktGarantiaSOL: "Garantía SOL", mktQtyWant: "Cantidad que quieres", craftSelectRecipe: "Selecciona una receta para ver la calculadora de crafteo.",
-    mktConnectWalletPill: "Conecta tu wallet", valanConnected: "✅ Valannia conectado · {n} héroes",
-    valanDisconnected: "🔗 Conecta tu cuenta de Valannia para ver tus héroes",
-    valanConnectCraft: "⚠️ Conecta Valannia para craftear.",
-    valanConnectHeroes: "Conecta tu cuenta de Valannia para ver tus héroes.",
     invSelectAcc: "Selecciona una cuenta.", invLoading: "Cargando...", errNeedBurner: "Activa el Burner primero.", 
     errFillAll: "Rellena todos los campos.", errInvQty: "Cantidad inválida.", errNotEnough: "Insuficiente.", 
     errPermissions: "Error: {msg}", errDevRefund: "Error: {msg}", errBuy: "Error: {msg}", successBuy: "¡Contrato ejecutado!",
@@ -162,6 +140,8 @@ const TRANSLATIONS = {
   },
   en: {
     menuInventory: "Inventory", menuMarket: "P2P Market", menuCrafting: "Heroes", menuRecipes: "Crafting",
+    betaTitle: "Beta Access", betaDesc: "Enter code to access Axon infrastructure.",
+    betaPlaceholder: "Access code...", betaBtn: "Enter", betaErr: "Incorrect code.",
     burnExportAlert: "Private Key copied!\n\nStore it safely.",
     burnCopyPubAlert: "Public address copied.", burnCreateBtn: "Activate Burner",
     burnConfirmMsg: "WARNING: Deleting Burner.\nType 'DELETE':",
@@ -183,31 +163,6 @@ const TRANSLATIONS = {
     mktCancelOk: "Order canceled.", fltAllCat: "Categories", fltAllSub: "Subcategories", fltAllItem: "Items", 
     fltClear: "Clear", mktFeeNote: "0% Selling fee.", mktSellerWallet: "Source Wallet", mktQtyToSell: "Quantity", 
     mktReceiveExact: "You receive:", mktNoOrdersFlt: "No orders.", mktNoOrdersGlobal: "No public offers.",
-    mktBuyer: "Buyer", mktOrderBook: "Order Book", mktSellOrders: "Sell Orders", mktBuyOrders: "Buy Orders",
-    mktOrderCount1: "order", mktOrderCountN: "orders", mktNoSellOrders: "No sell orders.", mktNoBuyOrders: "No buy orders.",
-    mktSellDesc: "📤 List an asset for sale. It stays locked in escrow until someone buys it or you cancel.",
-    mktBuyDesc: "📥 Post what you want to buy. SOL is locked as collateral. Any seller can accept.",
-    mktPayWallet: "Payment wallet", mktWalletConnected: "Wallet connected", mktSelectItem: "Select an item...",
-    mktSellBtn: "📤 Post Sale", mktBuyBtn: "📥 Post Buy Order", mktProcessing: "⏳ Processing...",
-    mktOrderVenta: "📤 Sell Order", mktOrderCompra: "📥 Buy Order",
-    mktOrdersVenta: "📤 Sell Orders", mktOrdersCompra: "📥 Buy Orders",
-    mktConfirmBuy: "Post buy order? {sol} SOL will be locked in escrow until completed or cancelled.",
-    mktBuyPublished: "✅ Buy order posted. SOL locked in escrow.", mktSaleComplete: "✅ Sale completed.",
-    mktSellBtn2: "⚡ Sell",
-    errConnectWallet: "Connect your wallet.", errConnectWalletSell: "Connect your wallet to sell.",
-    errConnectWalletLogistics: "Connect your wallet to run logistics.",
-    errConnectWalletSign: "Connect your wallet to sign.", errConnectOriginWallet: "Connect the origin wallet.",
-    errConnectValannia: "Connect Valannia first.", errEscrow: "Error: worker escrow unavailable.",
-    errCancelling: "Error cancelling:", errBuying: "Error buying:", errValannia: "Error connecting to Valannia:",
-    errMissingIngredients: "Not all ingredients found in Valannia inventory.",
-    errConnectAlias: "Connect the wallet to send its assets.",
-    navGuide: "📖 Guide", navGuideFooter: "📖 Guide & FAQs", heroesTitle: "Heroes", heroesSoon: "Coming Soon", heroesDesc: "Hero integration is coming soon. You'll be able to view your heroes, manage crafts and much more.",
-    btnConnectValannia: "Connect Valannia", btnDisconnectValannia: "Disconnect", btnConnecting: "Connecting...",
-    mktGarantiaSOL: "SOL Collateral", mktQtyWant: "Quantity you want", craftSelectRecipe: "Select a recipe to view the crafting calculator.",
-    mktConnectWalletPill: "Connect your wallet", valanConnected: "✅ Valannia connected · {n} heroes",
-    valanDisconnected: "🔗 Connect your Valannia account to see your heroes",
-    valanConnectCraft: "⚠️ Connect Valannia to craft.",
-    valanConnectHeroes: "Connect your Valannia account to see your heroes.",
     invSelectAcc: "Select an account.", invLoading: "Loading...", errNeedBurner: "Activate Burner.", 
     errFillAll: "Fill all fields.", errInvQty: "Invalid qty.", errNotEnough: "Insufficient.", 
     errPermissions: "Error: {msg}", errDevRefund: "Error: {msg}", errBuy: "Error: {msg}", successBuy: "Contract executed!",
@@ -350,8 +305,8 @@ function VistaHome({ onLaunchApp, lang, setLang, t }) {
     <div className="landing-container">
       <nav id="navbar" className={scrolled ? 'glass-card' : ''} style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.2rem 3rem', borderBottom: '1px solid transparent', transition: 'background .4s, border-color .4s, backdrop-filter .4s' }}>
         <div onClick={onLaunchApp} style={{cursor:'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-          <img src={emblemImg} alt="Polaris Fuel" style={{height: '44px', width: 'auto', filter: 'drop-shadow(0 0 8px rgba(255,107,26,0.4))'}} />
-          <span style={{fontFamily:'var(--font-heading)', fontSize:'11px', letterSpacing:'0.3em', color:'var(--pf-gold)', textTransform:'uppercase', fontWeight:600, marginLeft:'8px'}}>Wallet Manager</span>
+          <img src={logoImg} alt="Axon" style={{width: '36px', height: 'auto', mixBlendMode: 'screen', filter: 'drop-shadow(0 0 6px rgba(255,107,26,0.5))'}} />
+          <span style={{fontFamily: 'var(--font-heading)', fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.2em', color: 'var(--pf-gold)', textTransform: 'uppercase'}}>POLARIS FUEL<span style={{color: 'var(--pf-orange)'}}> · Wallet Manager</span></span>
         </div>
         <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
           <div style={{display: 'flex', gap: '0.4rem'}}>
@@ -395,6 +350,27 @@ function VistaHome({ onLaunchApp, lang, setLang, t }) {
 // ==========================================
 // RESTO DE LA DAPP (INVENTARIO, MERCADO, ETC)
 // ==========================================
+
+function PantallaBloqueo({ onAccesoConcedido, t }) {
+  const [inputCode, setInputCode] = useState("");
+  const [error, setError] = useState(false);
+  const comprobarCodigo = () => {
+    if (inputCode === CODIGO_BETA) { localStorage.setItem("acceso_beta_concedido", "true"); onAccesoConcedido(); } 
+    else { setError(true); setTimeout(() => setError(false), 2000); }
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', position: 'relative', zIndex: 10 }}>
+      <img src={logoImg} alt="Axon Logo" style={{ width: '100px', marginBottom: '30px', filter: 'drop-shadow(0 0 20px rgba(255, 107, 26, 0.5))' }} />
+      <div className="glass-card" style={{ padding: '40px', textAlign: 'center', maxWidth: '400px', width: '90%' }}>
+        <h2 style={{ color: 'var(--pf-gold-light)', marginTop: 0, fontFamily: 'var(--font-heading)', letterSpacing: '0.1em' }}>{t('betaTitle')}</h2>
+        <p style={{color: 'var(--pf-text-muted)', marginBottom: '20px', fontSize: '14px'}}>{t('betaDesc')}</p>
+        <input type="password" placeholder={t('betaPlaceholder')} value={inputCode} onChange={(e) => setInputCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && comprobarCodigo()} className="axon-input" style={{ marginBottom: '20px', textAlign: 'center' }} />
+        <button onClick={comprobarCodigo} className="axon-btn-primary" style={{width: '100%'}}><span>{t('betaBtn')}</span></button>
+        {error && <p style={{ color: 'var(--danger-color)', marginTop: '15px', fontSize: '13px' }}>{t('betaErr')}</p>}
+      </div>
+    </div>
+  );
+}
 
 
 function PanelMateriales({ data, onAddToCart, t }) {
@@ -454,6 +430,91 @@ function PanelMateriales({ data, onAddToCart, t }) {
   );
 }
 
+function HeaderBurner({ burner, setBurner, refreshTrigger, triggerRefresh, t }) {
+    const wallet = useWallet();
+    const { connection } = useConnection();
+    const toast = useToast();
+    const [sol, setSol] = useState('...');
+    const [valan, setValan] = useState('...');
+  
+    useEffect(() => {
+      const savedKey = localStorage.getItem('valannia_burner_key');
+      if (savedKey && !burner) { try { setBurner(Keypair.fromSecretKey(new Uint8Array(JSON.parse(savedKey)))); } catch (e) {} }
+    }, [setBurner, burner]);
+  
+    const handleActivate = async () => { try { const burnerKeypair = await deriveBurner(wallet); localStorage.setItem('valannia_burner_key', JSON.stringify(Array.from(burnerKeypair.secretKey))); setBurner(burnerKeypair); } catch (err) { toast("Error: " + err.message, 'error'); } };
+    const borrarBurner = () => { const confirmacion = prompt(t('burnConfirmMsg')); if (confirmacion === "BORRAR" || confirmacion === "DELETE") { localStorage.removeItem('valannia_burner_key'); setBurner(null); toast(t('burnOk'), 'success'); } else if (confirmacion !== null) { toast(t('burnErr'), 'error'); } };
+    const exportarLlave = () => { if (!burner) return; const secretKeyString = JSON.stringify(Array.from(burner.secretKey)); if (navigator.clipboard) { navigator.clipboard.writeText(secretKeyString).then(() => { toast(t('burnExportAlert'), 'success'); }).catch(() => { prompt(t('burnExportAlert'), secretKeyString); }); } else { prompt(t('burnExportAlert'), secretKeyString); } };
+    const copiarPublica = () => { if (!burner) return; if (navigator.clipboard) { navigator.clipboard.writeText(burner.publicKey.toBase58()).then(() => { toast(t('burnCopyPubAlert'), 'success'); }); } };
+
+    // 🟢 AQUÍ ESTÁ LA FUNCIÓN PARA AÑADIR FONDOS RESTAURADA 🟢
+    const handleDeposit = async (tokenType) => {
+        if (!wallet.connected) { toast(t('accPermReq'), 'error'); return; }
+        if (wallet.publicKey.toBase58() === burner.publicKey.toBase58()) { toast(t('burnDepositSameWallet'), 'error'); return; }
+    
+        const amtStr = prompt(tokenType === 'SOL' ? t('burnDepositSolPrompt') : t('burnDepositValanPrompt'));
+        if (!amtStr || isNaN(amtStr) || parseFloat(amtStr) <= 0) return;
+        const amt = parseFloat(amtStr);
+    
+        try {
+          const tx = new Transaction();
+          if (tokenType === 'SOL') {
+            tx.add(SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: burner.publicKey, lamports: Math.floor(amt * 1e9) }));
+          } else {
+            const mintPK = new PublicKey(VALAN_MINT);
+            const fromATA = await getAssociatedTokenAddress(mintPK, wallet.publicKey);
+            const toATA = await getAssociatedTokenAddress(mintPK, burner.publicKey);
+            const infoDest = await connection.getAccountInfo(toATA);
+            if (!infoDest) tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, toATA, burner.publicKey, mintPK));
+            tx.add(createTransferInstruction(fromATA, toATA, wallet.publicKey, Math.floor(amt * Math.pow(10, 6)))); 
+          }
+          const { blockhash } = await connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash; tx.feePayer = wallet.publicKey;
+          await wallet.sendTransaction(tx, connection);
+          toast(t('burnDepositSuccess'), 'success'); triggerRefresh();
+        } catch (e) { toast("Error: " + e.message, 'error'); }
+      };
+
+    const fetchSaldos = useCallback(async () => {
+        if (!burner) return;
+        try {
+            const lamports = await connection.getBalance(burner.publicKey); setSol((lamports / 1e9).toFixed(4));
+            const tokens = await connection.getParsedTokenAccountsByOwner(burner.publicKey, { programId: TOKEN_PROGRAM_ID });
+            let vAmt = 0; tokens.value.forEach(acc => { if (acc.account.data.parsed.info.mint === VALAN_MINT) vAmt += acc.account.data.parsed.info.tokenAmount.uiAmount; });
+            setValan(vAmt.toFixed(2));
+        } catch (err) {}
+    }, [burner, connection]);
+
+    useEffect(() => { fetchSaldos(); let interval = setInterval(fetchSaldos, 15000); return () => clearInterval(interval); }, [fetchSaldos, refreshTrigger]);
+  
+    if (!burner) return <button onClick={handleActivate} className="axon-btn-primary" style={{ padding: '8px 25px', fontSize: '10px' }}><span>{t('burnCreateBtn')}</span></button>;
+  
+    return (
+        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', padding: '6px 15px', borderRadius: '30px', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderRight: '1px solid var(--pf-border)', paddingRight: '15px' }}>
+            <span style={{ fontSize: '15px', filter: 'drop-shadow(0 0 5px rgba(255,107,26,0.5))' }}>🔥</span>
+            <span onClick={copiarPublica} className="axon-address-badge" title="Copiar">{burner.publicKey.toBase58().slice(0,4)}...{burner.publicKey.toBase58().slice(-4)}</span>
+            <button onClick={exportarLlave} className="icon-btn">🔑</button>
+            <button onClick={borrarBurner} className="icon-btn" style={{filter: 'grayscale(1)'}}>🗑️</button>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* 🟢 AÑADIDO: Icono de Solana y botón de Depósito (+) 🟢 */}
+            <div className="balance-pill-small">
+              <img src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" width="14" height="14" alt="sol"/>
+              <span style={{ color: 'var(--pf-gold)' }}>{sol} SOL</span>
+              <button onClick={() => handleDeposit('SOL')} title="Deposit SOL" className="deposit-btn">+</button>
+            </div>
+            {/* 🟢 AÑADIDO: Icono de Valannia y botón de Depósito (+) 🟢 */}
+            <div className="balance-pill-small">
+              <img src="https://portal.valannia.com/assets/logo-CM8aYtKK.webp" width="14" height="14" alt="valan"/>
+              <span style={{ color: 'var(--pf-orange)' }}>{valan} VALAN</span>
+              <button onClick={() => handleDeposit('VALAN')} title="Deposit VALAN" className="deposit-btn">+</button>
+            </div>
+          </div>
+        </div>
+      );
+}
 
 function CuentaFila({ cuenta, index, eliminarCuenta, tokensConfig, isActive, onSelect, onUpdateData, refreshTrigger, t }) {
   const { connection } = useConnection();
@@ -594,12 +655,11 @@ const ejecutarLogistica = async () => {
   try { destPK = new PublicKey(destinoSeleccionado); }
   catch (err) { toast(t('errInvalidAddr'), 'error'); setIsExecuting(false); return; }
 
-  // Agrupar envíos por wallet origen — la wallet conectada debe coincidir con el origen
   const origenesUnicos = [...new Set(carrito.map(c => c.origen))];
   for (const origen of origenesUnicos) {
     if (wallet.publicKey.toBase58() !== origen) {
-      const alias = carrito.find(c => c.origen === origen)?.aliasOrigen || origen.slice(0,8);
-      toast(t('errConnectAlias'), 'error');
+      const aliasO = carrito.find(c => c.origen === origen)?.aliasOrigen || origen.slice(0,8);
+      toast(t('errConnectAlias').replace('la wallet', `"${aliasO}"`), 'error');
       setIsExecuting(false); return;
     }
   }
@@ -608,41 +668,112 @@ const ejecutarLogistica = async () => {
     const enviosSPL  = carrito.filter(c => !c.item.isNFT);
     const enviosCore = carrito.filter(c =>  c.item.isNFT);
 
-    // ── SPL: wallet conectada firma directamente (sin approve previo) ──
+    // ── SPL: agrupar en lotes de hasta ~6 transfers por tx ──────────────
+    // Cada transfer SPL = ~2 instrucciones (createATA si hace falta + transfer).
+    // Límite seguro: 6 transfers por tx para no superar el límite de tamaño de Solana.
+    // Pre-calcular todas las instrucciones SPL
+    const splIxs = [];
     for (const envio of enviosSPL) {
-      const mintPK    = new PublicKey(envio.item.address);
-      const origenPK  = new PublicKey(envio.origen);
+      const mintPK     = new PublicKey(envio.item.address);
+      const origenPK   = new PublicKey(envio.origen);
       const ataOrigen  = await getAssociatedTokenAddress(mintPK, origenPK);
       const ataDestino = await getAssociatedTokenAddress(mintPK, destPK);
-      const tx = new Transaction();
+      const ixs = [];
       const infoDestino = await connection.getAccountInfo(ataDestino);
-      if (!infoDestino) tx.add(createAssociatedTokenAccountInstruction(wallet.publicKey, ataDestino, destPK, mintPK));
-      tx.add(createTransferInstruction(ataOrigen, ataDestino, wallet.publicKey, envio.cantidad));
-      const { blockhash } = await connection.getLatestBlockhash();
-      tx.recentBlockhash = blockhash; tx.feePayer = wallet.publicKey;
-      await wallet.sendTransaction(tx, connection);
+      if (!infoDestino) ixs.push(createAssociatedTokenAccountInstruction(wallet.publicKey, ataDestino, destPK, mintPK));
+      ixs.push(createTransferInstruction(ataOrigen, ataDestino, wallet.publicKey, envio.cantidad));
+      splIxs.push(...ixs);
     }
 
-    // ── Core NFTs: wallet conectada firma directamente ──────────────────
-    for (const envio of enviosCore) {
+    // Enviar en lotes — agrupación dinámica por tamaño real de tx
+    // En vez de un número fijo, construimos la tx e imos añadiendo instrucciones
+    // hasta que la tx serializada se acerque al límite de 1232 bytes de Solana.
+    const TX_SIZE_LIMIT = 1100; // margen de seguridad bajo el límite real de 1232
+    const { blockhash: splBlockhash } = await connection.getLatestBlockhash('confirmed');
+
+    const sendSPLBatch = async (ixBatch) => {
+      const tx = new Transaction();
+      tx.recentBlockhash = splBlockhash;
+      tx.feePayer = wallet.publicKey;
+      ixBatch.forEach(ix => tx.add(ix));
+      const sig = await wallet.sendTransaction(tx, connection);
+      const start = Date.now();
+      while (Date.now() - start < 45000) {
+        const status = await connection.getSignatureStatus(sig);
+        const c = status?.value?.confirmationStatus;
+        if (status?.value?.err) throw new Error('SPL tx failed: ' + JSON.stringify(status.value.err));
+        if (c === 'confirmed' || c === 'finalized') break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    };
+
+    let currentBatch = [];
+    let testTx = new Transaction();
+    testTx.recentBlockhash = splBlockhash;
+    testTx.feePayer = wallet.publicKey;
+
+    for (const ix of splIxs) {
+      testTx.add(ix);
+      currentBatch.push(ix);
+      // Estimar tamaño — si supera el límite, enviar el lote anterior y empezar uno nuevo
+      const estimatedSize = testTx.serialize({ requireAllSignatures: false, verifySignatures: false }).length;
+      if (estimatedSize > TX_SIZE_LIMIT) {
+        // Quitar la última instrucción y enviar el lote sin ella
+        currentBatch.pop();
+        if (currentBatch.length > 0) await sendSPLBatch(currentBatch);
+        // Nueva tx con solo la instrucción que no cabía
+        currentBatch = [ix];
+        testTx = new Transaction();
+        testTx.recentBlockhash = splBlockhash;
+        testTx.feePayer = wallet.publicKey;
+        testTx.add(ix);
+      }
+    }
+    // Enviar el último lote si queda algo
+    if (currentBatch.length > 0) await sendSPLBatch(currentBatch);
+
+    // ── Core NFTs: agrupar usando signAllTransactions ──────────────────
+    // UMI construye cada transferV1 como una VersionedTransaction separada.
+    // Usamos signAllTransactions para que el wallet firme todas de una vez
+    // (una sola aprobación en Phantom), luego se envían en serie.
+    if (enviosCore.length > 0) {
       const umi = createUmi(connection.rpcEndpoint).use(mplCore());
-      const walletSigner = {
-        publicKey: umiPublicKey(wallet.publicKey.toBase58()),
-        signTransaction: async (tx) => {
-          const serialized = umi.transactions.serialize(tx);
-          const versioned = VersionedTransaction.deserialize(serialized);
-          const signed = await wallet.signTransaction(versioned);
-          return umi.transactions.deserialize(signed.serialize());
-        },
-        signAllTransactions: async (txs) => txs,
-        signMessage: async () => new Uint8Array(0),
-      };
-      umi.use(signerIdentity(walletSigner));
-      await transferV1(umi, {
-        asset:    umiPublicKey(envio.item.address),
-        newOwner: umiPublicKey(destinoSeleccionado),
-        ...(envio.item.collection ? { collection: umiPublicKey(envio.item.collection) } : {}),
-      }).sendAndConfirm(umi);
+
+      // Construir todas las txs Core sin enviar
+      const coreTxBuilders = enviosCore.map(envio =>
+        transferV1(umi, {
+          asset:    umiPublicKey(envio.item.address),
+          newOwner: umiPublicKey(destinoSeleccionado),
+          ...(envio.item.collection ? { collection: umiPublicKey(envio.item.collection) } : {}),
+        })
+      );
+
+      // Serializar a VersionedTransaction para firmado en lote
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      const versionedTxs = await Promise.all(
+        coreTxBuilders.map(async (builder) => {
+          const umiTx = await builder.buildWithLatestBlockhash(umi);
+          const serialized = umi.transactions.serialize(umiTx);
+          return VersionedTransaction.deserialize(serialized);
+        })
+      );
+
+      // Una sola confirmación del wallet para todas las Core txs
+      const signedTxs = await wallet.signAllTransactions(versionedTxs);
+
+      // Enviar en serie y confirmar cada una
+      for (const signedTx of signedTxs) {
+        const raw = signedTx.serialize();
+        const sig = await connection.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 3 });
+        const start = Date.now();
+        while (Date.now() - start < 45000) {
+          const status = await connection.getSignatureStatus(sig);
+          const c = status?.value?.confirmationStatus;
+          if (status?.value?.err) throw new Error('Core tx failed: ' + JSON.stringify(status.value.err));
+          if (c === 'confirmed' || c === 'finalized') break;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
     }
 
     setTimeout(() => { triggerRefresh(); toast(t('cartSuccessDetails'), 'success'); }, 1000);
@@ -756,69 +887,17 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
 
   // ── Helper: enviar tx firmada a la red ──────────────────────────────────────
   const sendWorkerTx = async (txBase64, additionalSigners = []) => {
-    // Deserializar la tx que viene del worker (puede tener firma parcial del escrow)
     const txBytes = Uint8Array.from(atob(txBase64), c => c.charCodeAt(0));
     const tx = Transaction.from(txBytes);
-
-    // Guardar las firmas del escrow que ya vienen pre-firmadas
-    const existingSigs = tx.signatures.filter(s => s.signature !== null);
-
-    // El wallet firma su parte — usamos signTransaction que devuelve la tx firmada
-    const signedTx = await wallet.signTransaction(tx);
-
-    // Restaurar las firmas del escrow (wallet.signTransaction puede borrarlas)
-    for (const existing of existingSigs) {
-      const alreadySigned = signedTx.signatures.find(
-        s => s.publicKey.toBase58() === existing.publicKey.toBase58() && s.signature !== null
-      );
-      if (!alreadySigned) {
-        // Restaurar la firma del escrow
-        const idx = signedTx.signatures.findIndex(
-          s => s.publicKey.toBase58() === existing.publicKey.toBase58()
-        );
-        if (idx >= 0) signedTx.signatures[idx].signature = existing.signature;
-      }
-    }
-
-    // Signers adicionales si los hay
-    for (const signer of additionalSigners) signedTx.partialSign(signer);
-
-    // Enviar con skipPreflight=false para ver errores reales
-    const raw = signedTx.serialize({ requireAllSignatures: false });
-
-    // Obtener blockhash con lastValidBlockHeight para confirmación robusta
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-    if (!signedTx.recentBlockhash) signedTx.recentBlockhash = blockhash;
-
-    const sig = await connection.sendRawTransaction(raw, {
-      skipPreflight: true,          // skipPreflight para no fallar antes de enviar
-      maxRetries: 5,                // reintentar el envío hasta 5 veces
-      preflightCommitment: 'confirmed',
-    });
-
-    // Confirmar con timeout basado en blockHeight (más fiable que tiempo)
-    try {
-      const result = await connection.confirmTransaction(
-        { signature: sig, blockhash, lastValidBlockHeight },
-        'confirmed'
-      );
-      if (result.value.err) throw new Error('Tx falló on-chain: ' + JSON.stringify(result.value.err));
-    } catch (confirmErr) {
-      // Si es solo timeout, verificar manualmente si llegó
-      if (confirmErr.message?.includes('was not confirmed')) {
-        const status = await connection.getSignatureStatus(sig);
-        if (status?.value?.confirmationStatus === 'confirmed' || status?.value?.confirmationStatus === 'finalized') {
-          return sig; // Llegó aunque dio timeout
-        }
-        // Si realmente no llegó, reintentar el envío una vez más
-        await connection.sendRawTransaction(raw, { skipPreflight: true });
-        await new Promise(r => setTimeout(r, 5000));
-        const status2 = await connection.getSignatureStatus(sig);
-        if (status2?.value?.confirmationStatus) return sig;
-      }
-      throw confirmErr;
-    }
-
+    // El wallet conectado firma las instrucciones que le corresponden
+    await wallet.signTransaction(tx);
+    // Signers adicionales (para multi-sig)
+    for (const signer of additionalSigners) tx.partialSign(signer);
+    const { blockhash } = await connection.getLatestBlockhash();
+    if (!tx.recentBlockhash) tx.recentBlockhash = blockhash;
+    const raw = tx.serialize({ requireAllSignatures: false });
+    const sig = await connection.sendRawTransaction(raw, { skipPreflight: false });
+    await connection.confirmTransaction(sig, 'confirmed');
     return sig;
   };
 
@@ -939,7 +1018,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
   // ── ORDEN DE VENTA ───────────────────────────────────────────────────────────
   const crearOrdenVenta = async () => {
     if (!selectedCuenta || !selectedMatAddress || !sellPrice) { toast(t('errFillAll'), 'error'); return; }
-    if (!wallet.connected || wallet.publicKey.toBase58() !== selectedCuenta) { toast(t('errConnectOriginWallet'), 'error'); return; }
+    if (!wallet.connected || wallet.publicKey.toBase58() !== selectedCuenta) { toast('Conecta la wallet origen.', 'error'); return; }
     const isNFT = materialSeleccionadoObjeto?.isNFT;
     if (!isNFT && (!sellQty || parseFloat(sellQty) <= 0)) { toast(t('errInvQty'), 'error'); return; }
     if (!window.confirm(t('confirmSell'))) return;
@@ -953,7 +1032,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
         });
         const data = await res.json();
         const escrowAddr = data.escrowAddr || burner?.publicKey.toBase58();
-        if (!escrowAddr) { toast(t('errEscrow'), 'error'); setIsExecuting(false); return; }
+        if (!escrowAddr) { toast('Activa la Burn Wallet o el escrow del worker.', 'error'); setIsExecuting(false); return; }
         const umi = makeUmiWallet();
         await transferV1(umi, {
           asset: umiPublicKey(materialSeleccionadoObjeto.allAddresses[0]),
@@ -994,12 +1073,12 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
 
   // ── ORDEN DE COMPRA ──────────────────────────────────────────────────────────
   const crearOrdenCompra = async () => {
-    if (!wallet.connected) { toast(t('errConnectWallet'), 'error'); return; }
+    if (!wallet.connected) { toast('Conecta tu wallet.', 'error'); return; }
     if (!selectedMatAddress || !sellPrice) { toast(t('errFillAll'), 'error'); return; }
     const isNFT = materialSeleccionadoObjeto?.isNFT;
     if (!isNFT && (!sellQty || parseFloat(sellQty) <= 0)) { toast(t('errInvQty'), 'error'); return; }
     const totalSOL = isNFT ? parseFloat(sellPrice) : parseFloat(sellQty) * parseFloat(sellPrice);
-    if (!window.confirm(t('mktConfirmBuy').replace('{sol}', totalSOL.toFixed(4)))) return;
+    if (!window.confirm(`¿Publicar orden de compra? Se bloquearán ${totalSOL.toFixed(4)} SOL en escrow hasta que se complete o canceles.`)) return;
     setIsExecuting(true);
     try {
       // Worker construye tx de depósito SOL en escrow
@@ -1010,23 +1089,19 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       await sendWorkerTx(data.transaction);
-      // Buscar nombre e imagen del item en tokensConfig si no viene del selector
-      const tkMatch = tokensConfig.find(tk => tk.address === selectedMatAddress);
-      const itemName = materialSeleccionadoObjeto?.name || tkMatch?.name || selectedMatAddress;
-      const itemImg  = materialSeleccionadoObjeto?.image || tkMatch?.image || ITEM_IMAGES[itemName] || '';
       await addDoc(collection(db,'orders'), {
         id: Date.now(), orderType: 'compra',
         buyerAddr: wallet.publicKey.toBase58(),
         mint: selectedMatAddress,
-        item: itemName,
-        img: itemImg,
+        item: materialSeleccionadoObjeto?.name || selectedMatAddress,
+        img: materialSeleccionadoObjeto?.image || '',
         qty: parseInt(sellQty)||1, price: parseFloat(sellPrice),
         escrowAddr: data.escrowAddr, isNFT: isNFT || false,
         nftCollection: materialSeleccionadoObjeto?.collection || null,
-        category: materialSeleccionadoObjeto?.category || tkMatch?.category || '',
-        subcategory: materialSeleccionadoObjeto?.subcategory || tkMatch?.subcategory || '',
+        category: materialSeleccionadoObjeto?.category || '',
+        subcategory: materialSeleccionadoObjeto?.subcategory || '',
       });
-      toast(t('mktBuyPublished'), 'success');
+      toast('✅ Orden de compra publicada. SOL bloqueado en escrow.', 'success');
       setSellQty(''); setSellPrice(''); setSelectedMatAddress(''); triggerRefresh();
     } catch (e) { toast('Error: ' + e.message, 'error'); }
     setIsExecuting(false);
@@ -1038,52 +1113,49 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
     setIsExecuting(true);
     try {
       if (orden.orderType === 'compra') {
-        // Worker devuelve el SOL al comprador y borra la orden de Firebase
+        // Worker devuelve el SOL al comprador
         const res = await fetch(`${PROXY}/market/buy/cancel`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ price: orden.price, qty: orden.qty, buyerAddr: orden.buyerAddr, isNFT: orden.isNFT, firebaseId: orden.firebaseId }),
+          body: JSON.stringify({ price: orden.price, qty: orden.qty, buyerAddr: orden.buyerAddr, isNFT: orden.isNFT }),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+        // El escrow ya firmó — solo enviamos (no necesita firma del usuario)
         const txBytes = Uint8Array.from(atob(data.transaction), c => c.charCodeAt(0));
         const tx = Transaction.from(txBytes);
         const raw = tx.serialize({ requireAllSignatures: false });
-        await connection.sendRawTransaction(raw, { skipPreflight: true });
+        await connection.sendRawTransaction(raw, { skipPreflight: false });
       } else {
+        // Venta: worker devuelve tokens al seller
         if (orden.isNFT) {
-          // NFT Core: el cliente devuelve el NFT con UMI, el worker borra Firebase
+          // NFT Core: UMI desde el burner (el escrow es el burner)
           const umi = makeUmiBurner();
           await transferV1(umi, {
             asset: umiPublicKey(orden.mint), newOwner: umiPublicKey(orden.sellerAddr),
             ...(orden.nftCollection ? { collection: umiPublicKey(orden.nftCollection) } : {}),
           }).sendAndConfirm(umi);
-          // Pedir al worker que borre Firebase
-          await fetch(`${PROXY}/market/sell/cancel`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isNFT: true, firebaseId: orden.firebaseId }),
-          });
         } else {
-          // SPL: worker devuelve tokens y borra Firebase
           const res = await fetch(`${PROXY}/market/sell/cancel`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mint: orden.mint, qty: orden.qty, sellerAddr: orden.sellerAddr, isNFT: false, firebaseId: orden.firebaseId }),
+            body: JSON.stringify({ mint: orden.mint, qty: orden.qty, sellerAddr: orden.sellerAddr, isNFT: false }),
           });
           const data = await res.json();
           if (data.error) throw new Error(data.error);
           const txBytes = Uint8Array.from(atob(data.transaction), c => c.charCodeAt(0));
           const tx = Transaction.from(txBytes);
           const raw = tx.serialize({ requireAllSignatures: false });
-          await connection.sendRawTransaction(raw, { skipPreflight: true });
+          await connection.sendRawTransaction(raw, { skipPreflight: false });
         }
       }
+      await deleteDoc(doc(db,'orders',orden.firebaseId));
       toast(t('mktCancelOk'), 'info'); triggerRefresh();
-    } catch (e) { toast(t('errCancelling') + ' ' + e.message, 'error'); }
+    } catch (e) { toast('Error cancelando: ' + e.message, 'error'); }
     setIsExecuting(false);
   };
 
   // ── COMPRAR ORDEN DE VENTA ───────────────────────────────────────────────────
   const comprarOrden = async (orden) => {
-    if (!wallet.connected) { toast(t('errConnectWallet'), 'error'); return; }
+    if (!wallet.connected) { toast('Conecta tu wallet.', 'error'); return; }
     if (!window.confirm(t('confirmBuy'))) return;
     setIsExecuting(true);
     try {
@@ -1094,7 +1166,6 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
           mint: orden.mint, qty: orden.qty, price: orden.price,
           sellerAddr: orden.sellerAddr, buyerAddr: wallet.publicKey.toBase58(),
           isNFT: orden.isNFT, nftCollection: orden.nftCollection,
-          firebaseId: orden.firebaseId,
         }),
       });
       const data = await res.json();
@@ -1113,6 +1184,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
         // SPL: tx atómica completa — buyer firma el pago SOL, escrow ya firmó la entrega de tokens
         await sendWorkerTx(data.transaction);
       }
+      await deleteDoc(doc(db,'orders',orden.firebaseId));
       toast(t('successBuy'), 'success'); triggerRefresh();
     } catch (e) { toast('Error comprando: ' + e.message, 'error'); }
     setIsExecuting(false);
@@ -1120,7 +1192,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
 
   // ── EJECUTAR ORDEN DE COMPRA (vendedor acepta) ───────────────────────────────
   const ejecutarOrdenCompra = async (orden) => {
-    if (!wallet.connected) { toast(t('errConnectWalletSell'), 'error'); return; }
+    if (!wallet.connected) { toast('Conecta tu wallet para vender.', 'error'); return; }
     if (!window.confirm(`¿Aceptar orden de compra? Entregarás ${orden.qty} ${orden.item} y recibirás ${(orden.qty*orden.price).toFixed(4)} SOL.`)) return;
     setIsExecuting(true);
     try {
@@ -1131,7 +1203,6 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
           mint: orden.mint, qty: orden.qty, price: orden.price,
           sellerAddr: wallet.publicKey.toBase58(), buyerAddr: orden.buyerAddr,
           isNFT: orden.isNFT, nftCollection: orden.nftCollection,
-          firebaseId: orden.firebaseId,
         }),
       });
       const data = await res.json();
@@ -1150,7 +1221,8 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
         // SPL: tx atómica — seller firma la parte de tokens, escrow ya firmó el SOL
         await sendWorkerTx(data.transaction);
       }
-      toast(t('mktSaleComplete'), 'success'); triggerRefresh();
+      await deleteDoc(doc(db,'orders',orden.firebaseId));
+      toast('✅ Venta completada.', 'success'); triggerRefresh();
     } catch (e) { toast('Error: ' + e.message, 'error'); }
     setIsExecuting(false);
   };
@@ -1185,14 +1257,14 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
           {/* Header con desplegable */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
             <h3 style={{ color: 'var(--pf-gold-light)', margin: 0, fontSize: '18px', fontFamily: 'var(--font-heading)', whiteSpace: 'nowrap' }}>
-              {t('mktOrderBook')}
+              📋 Libro de Órdenes
             </h3>
             <select value={libroTipo} onChange={e => setLibroTipo(e.target.value)} className="axon-input" style={{ width: 'auto', padding: '6px 12px', fontSize: '11px', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em' }}>
-              <option value="venta">{t('mktOrdersVenta')}</option>
-              <option value="compra">{t('mktOrdersCompra')}</option>
+              <option value="venta">📤 Órdenes de Venta</option>
+              <option value="compra">📥 Órdenes de Compra</option>
             </select>
             <span style={{ fontSize: '11px', color: 'var(--pf-text-muted)', marginLeft: 'auto' }}>
-              {ordenesFiltradas.length} {ordenesFiltradas.length === 1 ? t('mktOrderCount1') : t('mktOrderCountN')}
+              {ordenesFiltradas.length} {ordenesFiltradas.length === 1 ? 'orden' : 'órdenes'}
             </span>
           </div>
 
@@ -1204,30 +1276,21 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
                   <th>{t('mktQty')}</th>
                   <th>{t('mktPrice')}</th>
                   <th>{t('mktTotal')}</th>
-                  <th>{libroTipo === 'venta' ? t('mktSeller') : t('mktBuyer')}</th>
+                  <th>{libroTipo === 'venta' ? t('mktSeller') : 'Comprador'}</th>
                   <th style={{ textAlign: 'right' }}>{t('mktAction')}</th>
                 </tr>
               </thead>
               <tbody>
                 {ordenesFiltradas.length === 0 ? (
                   <tr><td colSpan="6" className="empty-state" style={{ borderBottom: 'none' }}>
-                    {libroTipo === 'venta' ? t('mktNoSellOrders') : t('mktNoBuyOrders')}
+                    {libroTipo === 'venta' ? 'No hay órdenes de venta.' : 'No hay órdenes de compra.'}
                   </td></tr>
                 ) : ordenesFiltradas.map((orden) => (
                   <tr key={orden.id}>
-                    <td style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {(() => {
-                        const imgSrc = orden.img || ITEM_IMAGES[orden.item] || tokensConfig.find(tk=>tk.address===orden.mint)?.image || '';
-                        return imgSrc
-                          ? <img src={imgSrc} className="item-icon" alt="" style={{ width:'32px', height:'32px', objectFit:'contain', flexShrink:0 }} />
-                          : <div className="item-icon-placeholder" style={{ width:'32px', height:'32px', flexShrink:0 }} />;
-                      })()}
-                      <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--pf-text)', fontSize:'11px' }}>
-                          {orden.item && !orden.item.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/) ? orden.item : (tokensConfig.find(tk=>tk.address===orden.mint)?.name || orden.item)}
-                        </span>
-                        {orden.isNFT && <span style={{ fontSize: '9px', color: 'var(--pf-gold)', border: '1px solid var(--pf-gold)', padding: '1px 5px', width:'fit-content' }}>NFT</span>}
-                      </div>
+                    <td style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {orden.img ? <img src={orden.img} className="item-icon" alt="" /> : <div className="item-icon-placeholder" />}
+                      <span style={{ fontWeight: '600', color: 'var(--pf-text)' }}>{orden.item}</span>
+                      {orden.isNFT && <span style={{ fontSize: '9px', color: 'var(--pf-gold)', border: '1px solid var(--pf-gold)', padding: '1px 5px', marginLeft: '4px', flexShrink: 0 }}>NFT</span>}
                     </td>
                     <td style={{ color: 'var(--pf-orange)', fontWeight: '600' }}>{orden.isNFT ? '1' : orden.qty}</td>
                     <td>{orden.price} <span style={{ fontSize: '10px', color: '#9945FF' }}>SOL</span></td>
@@ -1241,7 +1304,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
                       ) : libroTipo === 'venta' ? (
                         <button onClick={() => comprarOrden(orden)} disabled={isExecuting} className="axon-btn-primary" style={{ padding: '8px 15px', fontSize: '10px' }}><span>{t('mktBuy1Click')}</span></button>
                       ) : (
-                        <button onClick={() => ejecutarOrdenCompra(orden)} disabled={isExecuting} className="axon-btn-primary" style={{ padding: '8px 15px', fontSize: '10px' }}><span>{t('mktSellBtn2')}</span></button>
+                        <button onClick={() => ejecutarOrdenCompra(orden)} disabled={isExecuting} className="axon-btn-primary" style={{ padding: '8px 15px', fontSize: '10px' }}><span>⚡ Vender</span></button>
                       )}
                     </td>
                   </tr>
@@ -1252,26 +1315,26 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
         </div>
 
         {/* ── Panel Crear Orden ── */}
-        <div className="glass-card" style={{ flex: 1, padding: '25px', display: 'flex', flexDirection: 'column', overflowY: 'auto', maxHeight: '100%' }}>
+        <div className="glass-card" style={{ flex: 1, padding: '25px', display: 'flex', flexDirection: 'column' }}>
           {/* Header con desplegable */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--pf-border)' }}>
             <select value={panelTipo} onChange={e => { setPanelTipo(e.target.value); setSellQty(''); setSellPrice(''); setSelectedMatAddress(''); }} className="axon-input" style={{ width: '100%', padding: '8px 12px', fontSize: '12px', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', color: panelTipo === 'venta' ? 'var(--pf-gold)' : '#4A90D9', borderColor: panelTipo === 'venta' ? 'var(--pf-gold)' : '#4A90D9' }}>
-              <option value="venta">{t('mktOrderVenta')}</option>
-              <option value="compra">{t('mktOrderCompra')}</option>
+              <option value="venta">📤 Orden de Venta</option>
+              <option value="compra">📥 Orden de Compra</option>
             </select>
           </div>
 
           {/* Descripción del tipo */}
           <div style={{ fontSize: '10px', color: 'var(--pf-text-muted)', marginBottom: '16px', padding: '8px 10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--pf-border)' }}>
             {panelTipo === 'venta'
-              ? t('mktSellDesc')
-              : t('mktBuyDesc')}
+              ? '📤 Publicas un asset a la venta. Se mueve a la Burn Wallet como garantía hasta que alguien compre o canceles.'
+              : '📥 Publicas lo que quieres comprar. El SOL queda bloqueado como garantía. Cualquier vendedor puede aceptar.'}
           </div>
 
           {cuentas.length === 0 ? (
             <div className="empty-state" style={{ marginTop: '30px' }}>{t('mktNoAccs')}</div>
           ) : (
-            <div className="form-group" style={{ overflowY: 'auto', flex: 1 }}>
+            <div className="form-group">
 
               {panelTipo === 'venta' ? (
                 /* ── ORDEN DE VENTA: selector de wallet ── */
@@ -1285,18 +1348,18 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
               ) : (
                 /* ── ORDEN DE COMPRA: wallet conectada automática ── */
                 <div>
-                  <label className="form-label">{t('mktPayWallet')}</label>
+                  <label className="form-label">Wallet de pago</label>
                   <div style={{ padding: '10px 12px', background: 'rgba(74,144,217,0.08)', border: '1px solid #4A90D9', fontSize: '11px', color: '#4A90D9', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '14px' }}>🔗</span>
-                    <span>{wallet.connected ? (wallet.publicKey.toBase58().slice(0,6) + '...' + wallet.publicKey.toBase58().slice(-4)) : t('mktConnectWalletPill')}</span>
-                    {wallet.connected && <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.7 }}>{t('mktWalletConnected')}</span>}
+                    <span>{wallet.connected ? (wallet.publicKey.toBase58().slice(0,6) + '...' + wallet.publicKey.toBase58().slice(-4)) : 'Conecta tu wallet'}</span>
+                    {wallet.connected && <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.7 }}>Wallet conectada</span>}
                   </div>
                 </div>
               )}
 
               {/* ── Selector de item ── */}
               <div>
-                <label className="form-label">{panelTipo === 'venta' ? t('mktItem') : t('mktItem')}</label>
+                <label className="form-label">{panelTipo === 'venta' ? t('mktItem') : '¿Qué quieres comprar?'}</label>
                 {panelTipo === 'venta' ? (
                   <select value={selectedMatAddress} onChange={(e) => { setSelectedMatAddress(e.target.value); setSellQty(''); }} disabled={!selectedCuenta} className="axon-input">
                     <option value="">{t('mktSelectMat')}</option>
@@ -1305,7 +1368,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
                 ) : (
                   /* Orden de compra: todos los items de Valannia por categoría */
                   <select value={selectedMatAddress} onChange={(e) => { setSelectedMatAddress(e.target.value); setSellQty(''); }} className="axon-input">
-                    <option value="">{t('mktSelectItem')}</option>
+                    <option value="">Selecciona un item...</option>
                     {(() => {
                       const byCat = {};
                       tokensConfig.forEach(tk => {
@@ -1369,7 +1432,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
               {!materialSeleccionadoObjeto?.isNFT && (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <label className="form-label" style={{ marginBottom: 0 }}>{panelTipo === 'venta' ? t('mktQtyToSell') : t('mktQtyWant')}</label>
+                    <label className="form-label" style={{ marginBottom: 0 }}>{panelTipo === 'venta' ? t('mktQtyToSell') : 'Cantidad que quieres'}</label>
                     {panelTipo === 'venta' && materialSeleccionadoObjeto && (
                       <span className="max-btn" onClick={() => setSellQty(materialSeleccionadoObjeto.cantidad)}>MAX</span>
                     )}
@@ -1379,21 +1442,21 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
               )}
 
               <div>
-                <label className="form-label">{panelTipo === 'venta' ? t('mktPrice') : t('mktPrice')}</label>
+                <label className="form-label">{panelTipo === 'venta' ? t('mktPrice') : 'Precio por unidad que ofreces'}</label>
                 <div className="input-with-suffix">
                   <input type="number" placeholder={t('mktSetPrice')} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} className="axon-input" style={{ border: 'none', background: 'transparent' }} />
                   <span className="suffix" style={{ color: '#9945FF' }}>SOL</span>
                 </div>
               </div>
 
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', borderLeft:`2px solid ${panelTipo==='compra'?'#4A90D9':'var(--pf-gold)'}`, background:'rgba(0,0,0,0.2)', marginBottom:'6px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--pf-text-muted)' }}>
-                  {panelTipo === 'venta' ? t('mktReceiveExact') : t('mktGarantiaSOL')}
+              <div className="summary-box" style={{ borderColor: panelTipo === 'compra' ? '#4A90D9' : undefined }}>
+                <span style={{ fontSize: '12px', color: 'var(--pf-text-muted)' }}>
+                  {panelTipo === 'venta' ? t('mktReceiveExact') : 'SOL que bloquearás como garantía'}
                 </span>
-                <span style={{ fontSize: '16px', color: panelTipo==='venta' ? 'var(--pf-gold)' : '#4A90D9', fontWeight: 'bold' }}>
+                <div style={{ fontSize: '22px', color: panelTipo==='venta' ? 'var(--pf-gold)' : '#4A90D9', fontWeight: 'bold', margin: '5px 0' }}>
                   {materialSeleccionadoObjeto?.isNFT ? (sellPrice||'0') : totalRecibir}
-                  <span style={{ color: '#9945FF', fontSize: '12px' }}> SOL</span>
-                </span>
+                  <span style={{ color: '#9945FF', fontSize: '16px' }}> SOL</span>
+                </div>
               </div>
 
               <button
@@ -1411,7 +1474,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
                   transition: '0.2s',
                 }}
               >
-                {isExecuting ? t('mktProcessing') : panelTipo === 'venta' ? t('mktSellBtn') : t('mktBuyBtn')}
+                {isExecuting ? '⏳ Procesando...' : panelTipo === 'venta' ? '📤 Publicar Venta' : '📥 Publicar Compra'}
               </button>
             </div>
           )}
@@ -1660,8 +1723,8 @@ function RecipeExplorer({ hero }) {
   };
 
   const executeCraft = async (recipeName) => {
-    if (!valanToken) { toast(t('errConnectValannia'), 'error'); return; }
-    if (!wallet.connected) { toast(t('errConnectWalletSign'), 'error'); return; }
+    if (!valanToken) { toast('Conecta Valannia primero.', 'error'); return; }
+    if (!wallet.connected) { toast('Conecta tu wallet para firmar.', 'error'); return; }
     const r = VALANNIA_RECIPES[recipeName];
     if (!r) return;
 
@@ -1675,7 +1738,7 @@ function RecipeExplorer({ hero }) {
     // Construir array de ingredient UUIDs
     const ingredients = r.i.map(([ing]) => inventory[ing]?.id).filter(Boolean);
     if (ingredients.length !== r.i.length) {
-      toast(t('errMissingIngredients'), 'error');
+      toast('No se encontraron todos los ingredientes en el inventario de Valannia.', 'error');
       return;
     }
 
@@ -1805,7 +1868,7 @@ function RecipeExplorer({ hero }) {
         {/* Panel calculadora + crafteo */}
         <div style={{flexGrow:1,overflowY:'auto',minWidth:0,display:'flex',flexDirection:'column',gap:10}}>
           {!sel
-            ? <div className="empty-state" style={{marginTop:'40px'}}>{t('craftSelectRecipe')}</div>
+            ? <div className="empty-state" style={{marginTop:'40px'}}>Selecciona una receta para ver la calculadora.</div>
             : <>
                 <CraftingCalculator recipeName={sel} />
 
@@ -1842,7 +1905,7 @@ function RecipeExplorer({ hero }) {
                     <div style={{fontSize:'11px',color:'var(--pf-text-muted)',marginBottom:10}}>Cargando inventario...</div>
                   )}
                   {!valanToken && (
-                    <div style={{fontSize:'11px',color:'var(--pf-orange)',marginBottom:10}}>{t('valanConnectCraft')}</div>
+                    <div style={{fontSize:'11px',color:'var(--pf-orange)',marginBottom:10}}>⚠️ Conecta Valannia para craftear.</div>
                   )}
 
                   {/* Selector cantidad + botón */}
@@ -1939,13 +2002,13 @@ function VistaCrafteo({ cuentas, t }) {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '24px' }}>
       <div style={{ fontSize: '64px', filter: 'grayscale(0.3)' }}>⚔️</div>
       <div style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', color: 'var(--pf-gold-light)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-        {t('heroesTitle')}
+        Héroes
       </div>
       <div style={{ fontFamily: 'var(--font-heading)', fontSize: '11px', letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--pf-orange)', border: '1px solid var(--pf-orange)', padding: '6px 20px' }}>
-        {t('heroesSoon')}
+        Próximamente
       </div>
       <p style={{ color: 'var(--pf-text-muted)', fontSize: '13px', maxWidth: '360px', textAlign: 'center', lineHeight: '1.7' }}>
-        {t('heroesDesc')}
+        La integración de héroes estará disponible próximamente. Podrás ver tus héroes, gestionar crafts y mucho más.
       </p>
     </div>
   );
@@ -1963,7 +2026,7 @@ function VistaCrafteo({ cuentas, t }) {
 
   // ── Auth con Valannia ──────────────────────────────────────────────────
   const conectarValannia = async () => {
-    if (!wallet.connected) { toast(t('errConnectWallet'), 'error'); return; }
+    if (!wallet.connected) { toast('Conecta tu wallet primero.', 'error'); return; }
     setIsLoading(true);
     try {
       // Generamos o recuperamos un device UUID persistente
@@ -2013,7 +2076,7 @@ localStorage.setItem('valannia_v_token', token);
 setValanToken(token);
 fetchHeroes(token); // llamada directa sin esperar al useEffect
     } catch (e) {
-      toast(t('errValannia') + ' ' + e.message, 'error');
+      toast('Error al conectar con Valannia: ' + e.message, 'error');
     }
     setIsLoading(false);
   };
@@ -2064,10 +2127,10 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
 
       {/* Header con estado de conexión */}
       <div className="alert-banner" style={{ border: `1px solid ${valanToken ? 'var(--pf-gold)' : 'var(--pf-orange)'}`, color: valanToken ? 'var(--pf-gold)' : 'var(--pf-orange)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>{valanToken ? t('valanConnected').replace('{n}', misHeroes.length) : t('valanDisconnected')}</span>
+        <span>{valanToken ? `✅ Valannia conectado · ${misHeroes.length} héroes` : '🔗 Conecta tu cuenta de Valannia para ver tus héroes'}</span>
         {valanToken
-          ? <button onClick={desconectarValannia} className="axon-btn-outline" style={{ fontSize: '10px', padding: '4px 12px' }}>{t('btnDisconnectValannia')}</button>
-          : <button onClick={conectarValannia} disabled={isLoading || !wallet.connected} className="axon-btn-primary" style={{ fontSize: '10px', padding: '4px 16px' }}><span>{isLoading ? t('btnConnecting') : t('btnConnectValannia')}</span></button>
+          ? <button onClick={desconectarValannia} className="axon-btn-outline" style={{ fontSize: '10px', padding: '4px 12px' }}>Desconectar</button>
+          : <button onClick={conectarValannia} disabled={isLoading || !wallet.connected} className="axon-btn-primary" style={{ fontSize: '10px', padding: '4px 16px' }}><span>{isLoading ? 'Conectando...' : 'Conectar Valannia'}</span></button>
         }
       </div>
 
@@ -2078,7 +2141,7 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
           <h3 style={{ color: 'var(--pf-gold-light)', margin: '0 0 25px 0', fontSize: '20px', fontFamily: 'var(--font-heading)' }}>{t('craftTitle')}</h3>
 
           {!valanToken && (
-            <div className="empty-state">{t('valanConnectHeroes')}</div>
+            <div className="empty-state">Conecta tu cuenta de Valannia para ver tus héroes.</div>
           )}
           {valanToken && isLoading && (
             <div className="empty-state">{t('invLoading')}</div>
@@ -2321,7 +2384,7 @@ function VistaRecetas({ t }) {
       {/* Panel derecho: calculadora de crafteo */}
       <div className="glass-card" style={{ flexGrow: 1, padding: '20px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {!sel
-          ? <div className="empty-state" style={{ marginTop: '60px' }}>{t('craftSelectRecipe')}</div>
+          ? <div className="empty-state" style={{ marginTop: '60px' }}>Selecciona una receta para ver la calculadora de crafteo.</div>
           : <CraftingCalculator recipeName={sel} />
         }
       </div>
@@ -2375,10 +2438,12 @@ function MainApp() {
   const [burner, setBurner] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isAppLaunched, setIsAppLaunched] = useState(false);
+  const [tieneAcceso, setTieneAcceso] = useState(false);
   const [cuentas, setCuentas] = useState(() => JSON.parse(localStorage.getItem('valanniaCuentas') || '[]'));
   const [vistaActiva, setVistaActiva] = useState('inventario');
 
   useEffect(() => {
+    if (localStorage.getItem("acceso_beta_concedido") === "true") setTieneAcceso(true);
     fetch(JSON_URL).then(res => res.json()).then(data => setTokensConfig(extractTokens(data)));
   }, []);
 
@@ -2394,19 +2459,21 @@ function MainApp() {
           
           {!isAppLaunched ? (
              <VistaHome onLaunchApp={() => setIsAppLaunched(true)} lang={lang} setLang={setLang} t={t} />
+          ) : !tieneAcceso ? (
+             <PantallaBloqueo onAccesoConcedido={() => setTieneAcceso(true)} t={t} />
           ) : (
             <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10 }}>
               <nav className="glass-card" style={{ margin: '15px 20px 0 20px', padding: '12px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', width: '300px', cursor: 'none' }} onClick={() => setIsAppLaunched(false)}>
-                  <img src={emblemImg} alt="Polaris Fuel" style={{ height: '48px', width: 'auto', filter: 'drop-shadow(0 0 10px rgba(255,107,26,0.5))' }} />
-                  <span style={{fontFamily:'var(--font-heading)', fontSize:'13px', letterSpacing:'0.3em', color:'var(--pf-gold)', textTransform:'uppercase', fontWeight:600, marginLeft:'10px'}}>Wallet Manager</span>
+                  <img src={logoImg} alt="Axon" className="axon-logo-glow" style={{ width: '40px', height: '40px' }} />
+                  <h2 style={{ margin: 0, fontSize: '18px', letterSpacing: '2px', fontWeight: '800', fontFamily: 'var(--font-heading)', color: 'var(--pf-gold-light)' }}>POLARIS FUEL<span style={{color: 'var(--pf-orange)'}}> · Wallet Manager</span></h2>
                   <span style={{fontSize:'10px', border:'1px solid var(--pf-orange)', color: 'var(--pf-orange)', background: 'rgba(255,107,26,0.1)', padding:'3px 8px', borderRadius:'4px', marginLeft: '5px', fontWeight: 'bold'}}>BETA</span>
                 </div>
                 
 
                 
                 <div style={{ flexGrow: 1, display: 'flex', justifyContent: 'center' }}>
-
+                  <HeaderBurner burner={burner} setBurner={setBurner} refreshTrigger={refreshTrigger} triggerRefresh={triggerRefresh} t={t} />
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', width: '300px', justifyContent: 'flex-end' }}>
@@ -2414,7 +2481,7 @@ function MainApp() {
                     🌐 Polaris Fuel
                   </a>
                   <a href="./guide.html" target="_blank" rel="noreferrer" style={{ fontFamily: 'var(--font-heading)', fontSize: '9px', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--pf-text-muted)', textDecoration: 'none', border: '1px solid var(--pf-border)', padding: '6px 10px', transition: '0.2s', whiteSpace: 'nowrap' }} onMouseOver={e => { e.target.style.color='var(--pf-gold)'; e.target.style.borderColor='var(--pf-gold)'; }} onMouseOut={e => { e.target.style.color='var(--pf-text-muted)'; e.target.style.borderColor='var(--pf-border)'; }}>
-                    {t('navGuide')}
+                    📖 Guía
                   </a>
                   <select value={lang} onChange={(e) => setLang(e.target.value)} className="axon-input" style={{width: 'auto', padding: '8px 12px'}}>
                     <option value="es" style={{background: 'var(--pf-bg)'}}>ES</option>
@@ -2450,7 +2517,7 @@ function MainApp() {
                         🌐 Polaris Fuel
                       </a>
                       <a href="./guide.html" target="_blank" rel="noreferrer" style={{ display: 'block', fontFamily: 'var(--font-heading)', fontSize: '9px', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--pf-text-muted)', textDecoration: 'none', border: '1px solid var(--pf-border)', padding: '6px 8px', transition: '0.2s' }} onMouseOver={e => { e.target.style.color='var(--pf-gold)'; e.target.style.borderColor='var(--pf-gold)'; }} onMouseOut={e => { e.target.style.color='var(--pf-text-muted)'; e.target.style.borderColor='var(--pf-border)'; }}>
-                        {t('navGuideFooter')}
+                        📖 Guía & FAQs
                       </a>
                     </div>
                   </div>

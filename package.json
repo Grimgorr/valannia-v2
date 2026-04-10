@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "npm run build && wrangler dev",
     "predeploy": "npm run build",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@metaplex-foundation/mpl-core": "^1.8.0",

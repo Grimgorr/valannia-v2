@@ -26,7 +26,7 @@ git commit -m "%mensaje%"
 
 echo.
 echo [4/4] Subiendo el codigo fuente a GitHub...
-git push
+git push -u origin master
 
 echo.
 echo ===================================================
