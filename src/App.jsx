@@ -1694,7 +1694,7 @@ function CraftingCalculator({ recipeName, onClose }) {
 }
 
 // Hero recipe explorer (used in Heroes tab)
-function RecipeExplorer({ hero }) {
+function RecipeExplorer({ hero, tokensConfig = [], nftImages = {} }) {
   const prof = hero?.item?.attributes?.hero?.profession;
   const lvl = hero?.item?.attributes?.hero?.level || 1;
   const [search, setSearch] = React.useState('');
@@ -1764,30 +1764,45 @@ function RecipeExplorer({ hero }) {
         body: JSON.stringify({ hero: hero.id, recipe: recipeName, ingredients, count: craftQty })
       });
       const reqData = await reqRes.json();
+      console.log('[Craft] request response:', JSON.stringify(reqData).slice(0, 500));
       if (reqData.state !== 'Ok') throw new Error(reqData.message || 'Error en craft request');
 
-      const txBase64 = reqData.result?.transaction;
-      const craftId = reqData.result?.id;
-      if (!txBase64) throw new Error('No se recibió transacción');
+      // result es el string base64 directamente (igual que backlog)
+      const txBase64 = typeof reqData.result === 'string' ? reqData.result : reqData.result?.transaction;
+      const craftId  = reqData.result?.id; // puede venir en provide response
+      if (!txBase64) throw new Error('No se recibió transacción — response: ' + JSON.stringify(reqData).slice(0, 200));
 
       // 2. Deserializar y firmar con wallet
       const txBytes = Uint8Array.from(atob(txBase64), c => c.charCodeAt(0));
       const versionedTx = VersionedTransaction.deserialize(txBytes);
       const signedTx = await wallet.signTransaction(versionedTx);
 
-      // 3. Provide — enviar tx firmada
+      // 3. Provide — enviar tx firmada como text/plain (igual que backlog)
       const signedB64 = btoa(String.fromCharCode(...signedTx.serialize()));
       const provRes = await fetch('https://valannia-proxy.polarisfuel.workers.dev/rtr/commander/craft/provide', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-token': valanToken, 'Authorization': `Bearer ${valanToken}` },
-        body: JSON.stringify({ id: craftId, transaction: signedB64 })
+        headers: { 'Content-Type': 'text/plain', 'x-auth-token': valanToken, 'Authorization': `Bearer ${valanToken}` },
+        body: signedB64,
       });
       const provData = await provRes.json();
+      console.log('[Craft] provide response:', JSON.stringify(provData).slice(0, 300));
       if (provData.state !== 'Ok') throw new Error(provData.message || 'Error en craft provide');
 
-      toast(`✅ Craft iniciado: ${recipeName} ×${craftQty}`, 'success');
+      // 4. Complete — el id viene en la respuesta del provide
+      const craftIdFinal = provData.result?.id || craftId;
+      console.log('[Craft] craftId for complete:', craftIdFinal);
+      const compRes = await fetch(`https://valannia-proxy.polarisfuel.workers.dev/rtr/commander/craft/complete?data=${encodeURIComponent(JSON.stringify(craftIdFinal))}`, {
+        method: 'GET',
+        headers: { 'x-auth-token': valanToken, 'Authorization': `Bearer ${valanToken}` },
+      });
+      const compData = await compRes.json();
+      const craftState = compData.result?.processable?.payload?.progress?.state || compData.result?.state || '';
+      const success = compData.state === 'Ok';
+      if (!success) throw new Error(compData.message || 'Error en craft complete');
 
-      // 4. Recargar inventario
+      toast(`✅ ${recipeName} ×${craftQty} — ${craftState === 'Success' ? 'completado' : 'en proceso'}`, 'success');
+
+      // 5. Recargar inventario
       setTimeout(() => {
         fetch('https://valannia-proxy.polarisfuel.workers.dev/asset/inventory/list?data=%7B%22pagination%22%3A%7B%22page%22%3A0%2C%22count%22%3A5000%7D%7D', {
           headers: { 'x-auth-token': valanToken, 'Authorization': `Bearer ${valanToken}` }
@@ -1868,8 +1883,20 @@ function RecipeExplorer({ hero }) {
                   <span style={{fontSize:'9px',color:'var(--pf-text-muted)',flexShrink:0,marginLeft:'6px'}}>Lv{rv.l} · {fmtTime(rv.s)}</span>
                 </div>
                 {rv.o.length>0 && (
-                  <div style={{fontSize:'9px',color:'var(--pf-text-muted)',marginTop:'1px'}}>
-                    {rv.o.map(p=><span key={p} style={{marginRight:'6px'}}>{prodIcon(p)} {p}</span>)}
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'4px',marginTop:'3px'}}>
+                    {rv.o.map(p => {
+                      const tk = tokensConfig.find(t => t.name === p);
+                      const img = nftImages[p] || tk?.image || null;
+                      return (
+                        <span key={p} style={{display:'flex',alignItems:'center',gap:'3px',fontSize:'9px',color:'var(--pf-gold)'}}>
+                          {img
+                            ? <img src={img} alt={p} width="12" height="12" style={{objectFit:'cover',flexShrink:0,border:'1px solid var(--pf-border)'}} onError={e=>{e.target.style.display='none'}}/>
+                            : <span style={{fontSize:'8px',opacity:0.6}}>✦</span>
+                          }
+                          {p}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </button>
@@ -2009,28 +2036,12 @@ function getHeroImg(kind, border) {
 }
 
 
-function VistaCrafteo({ cuentas, t }) {
-  // ── PRÓXIMAMENTE — código oculto hasta que Valannia habilite acceso API ──
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '24px' }}>
-      <div style={{ fontSize: '64px', filter: 'grayscale(0.3)' }}>⚔️</div>
-      <div style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', color: 'var(--pf-gold-light)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-        Héroes
-      </div>
-      <div style={{ fontFamily: 'var(--font-heading)', fontSize: '11px', letterSpacing: '0.3em', textTransform: 'uppercase', color: 'var(--pf-orange)', border: '1px solid var(--pf-orange)', padding: '6px 20px' }}>
-        Próximamente
-      </div>
-      <p style={{ color: 'var(--pf-text-muted)', fontSize: '13px', maxWidth: '360px', textAlign: 'center', lineHeight: '1.7' }}>
-        La integración de héroes estará disponible próximamente. Podrás ver tus héroes, gestionar crafts y mucho más.
-      </p>
-    </div>
-  );
-
-  /* eslint-disable no-unreachable */
+function VistaCrafteo({ cuentas, t, tokensConfig = [], nftImages = {} }) {
   const wallet = useWallet();
   const toast = useToast();
   const [selectedCuenta, setSelectedCuenta] = useState("");
   const [misHeroes, setMisHeroes] = useState([]);
+  const [heroQueues, setHeroQueues] = useState({}); // { heroId: [{recipe, count, ...}] }
   const [isLoading, setIsLoading] = useState(false);
   const [valanToken, setValanToken] = useState(() => localStorage.getItem('valannia_v_token') || null);
   const [heroSeleccionado, setHeroSeleccionado] = useState(null);
@@ -2121,6 +2132,11 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
     console.log('[AXON] Heroes data:', JSON.stringify(data, null, 2));
     if (res.status === 401) { desconectarValannia(); return; }
     setMisHeroes(data.result?.heroes || []);
+    // Guardar queues por heroId
+    const qmap = {};
+    (data.result?.queues || []).forEach(q => { qmap[q.hero] = q.queue || []; });
+    console.log('[Queues]', JSON.stringify(qmap).slice(0, 400));
+    setHeroQueues(qmap);
   } catch (e) {
     console.error('[AXON] Error fetching heroes:', e);
   }
@@ -2198,11 +2214,12 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
                         : <img src={`https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${h.item.kind}&backgroundColor=0A0704`} alt={h.item.kind} className="hero-img" />;
                     })()}
                   </div>
-                  <h4 className="hero-title">{h.item.kind}</h4>
-                  <div style={{ fontSize: '9px', color: 'var(--pf-text-muted)', textAlign: 'center', marginBottom: '6px', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em' }}>{h.item.capital}</div>
+                  <div style={{ textAlign: 'center', padding: '4px 6px 2px', minHeight: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <h4 className="hero-title" style={{ fontSize: '10px', margin: 0, lineHeight: 1.2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{h.item.kind}</h4>
+                  </div>
+                  <div style={{ fontSize: '8px', color: 'var(--pf-text-muted)', textAlign: 'center', marginBottom: '4px', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em' }}>{h.item.capital}</div>
                   <div className="hero-stats">
                     <div className="stat-row"><span className="stat-label">{t('craftProfession')}</span><span className="stat-value" style={{ color: 'var(--pf-gold)' }}>{hero.profession}</span></div>
-                    <div className="stat-row"><span className="stat-label">{t('craftLevel')}</span><span className="stat-value">Lv {hero.level}</span></div>
                     <div className="stat-row"><span className="stat-label">Mastery</span><span className="stat-value">{activeMastery}</span></div>
                     <div className="stat-row"><span className="stat-label">XP</span><span className="stat-value">{hero.experience.toLocaleString()}</span></div>
                     <div className="stat-row">
@@ -2223,6 +2240,123 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
                       </div>
                     )}
                   </div>
+
+                  {/* Activity log — crafteo activo via h.assemble */}
+                  {(() => {
+                    const assemble = h.assemble;
+                    if (!assemble || assemble.progress !== 'Running') return null;
+                    const finishAt = new Date(assemble.finishesAt);
+                    const totalSecs = Math.max(0, Math.floor((finishAt - now) / 1000));
+                    const d  = Math.floor(totalSecs / 86400);
+                    const hr = Math.floor((totalSecs % 86400) / 3600);
+                    const mn = Math.floor((totalSecs % 3600) / 60);
+                    const sc = totalSecs % 60;
+                    const timeStr = d > 0
+                      ? `${d}D · ${String(hr).padStart(2,'0')}H · ${String(mn).padStart(2,'0')}M`
+                      : `${String(hr).padStart(2,'0')}H · ${String(mn).padStart(2,'0')}M · ${String(sc).padStart(2,'0')}S`;
+                    const recipe = assemble.recipe || '';
+                    const recipeData = VALANNIA_RECIPES[recipe];
+                    // Cantidad: assemble.action.craft.duration vs recipe seconds → count = duration / recipe.s
+                    const craftDuration = assemble.action?.craft?.duration || 0;
+                    const recipeSecs    = recipeData?.s || 0;
+                    const craftCount    = (craftDuration && recipeSecs) ? Math.round(craftDuration / recipeSecs) : null;
+                    const produces = recipeData?.o?.length ? recipeData.o.join(' · ') : null;
+                    // Nivel de profesión del héroe (1-12)
+                    const profLevel = hero.level || null;
+                    // Logo de la profesión del héroe
+                    const PROF_LOGOS = {
+                      Artisan:   'https://portal.valannia.com/professions/logos/artisan.webp',
+                      Blacksmith:'https://portal.valannia.com/professions/logos/blacksmith.webp',
+                      Engineer:  'https://portal.valannia.com/professions/logos/engineering.webp',
+                      Alchemist: 'https://portal.valannia.com/professions/logos/alchemy.webp',
+                      Architect: 'https://portal.valannia.com/professions/logos/architecture.webp',
+                      Jeweler:   'https://portal.valannia.com/professions/logos/jewelry.webp',
+                      Miner:     'https://portal.valannia.com/professions/logos/mining.webp',
+                      Explorer:  'https://portal.valannia.com/professions/logos/exploration.webp',
+                    };
+                    const profLogo = PROF_LOGOS[hero.profession];
+                    return (
+                      <div style={{ borderTop: '1px solid var(--pf-border)', padding: '7px 8px', background: 'rgba(91,143,168,0.06)' }}>
+                        {/* Tiempo restante con logo de profesión + nivel */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
+                          {profLogo
+                            ? <img src={profLogo} alt={hero.profession} width="13" height="13" style={{ objectFit: 'contain', flexShrink: 0 }} onError={e => { e.target.style.display='none'; }} />
+                            : <span style={{ fontSize: '10px' }}>⚒️</span>
+                          }
+                          <span style={{ fontFamily: 'var(--font-heading)', fontSize: '9px', color: '#5B8FA8', letterSpacing: '0.06em', fontWeight: 700 }}>{timeStr}</span>
+
+                        </div>
+                        {/* Nombre de la receta */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: produces ? '3px' : '0' }}>
+                          <span style={{ fontFamily: 'var(--font-heading)', fontSize: '8px', color: 'var(--pf-text-muted)', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {recipe}
+                          </span>
+                        </div>
+                        {/* Items producidos con imagen del item y cantidad */}
+                        {recipeData?.o?.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
+                            {recipeData.o.map((itemName, idx) => {
+                              const tk = tokensConfig.find(t => t.name === itemName);
+                              const img = nftImages[itemName] || tk?.image || null;
+                              return (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  {img
+                                    ? <img src={img} alt={itemName} width="14" height="14" style={{ objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pf-border)' }} onError={e => { e.target.style.display='none'; }} />
+                                    : <span style={{ width: '14px', height: '14px', background: 'var(--pf-border)', flexShrink: 0, display: 'inline-block' }} />
+                                  }
+                                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '8px', color: 'var(--pf-gold)', letterSpacing: '0.04em', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {itemName}
+                                  </span>
+                                  {craftCount && craftCount > 0 && (
+                                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: '9px', color: 'var(--pf-orange)', fontWeight: 700, flexShrink: 0 }}>
+                                      ×{craftCount}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Cola de crafteo */}
+                  {(() => {
+                    const queue = heroQueues[h.id] || [];
+                    if (queue.length === 0) return null;
+                    return (
+                      <div style={{ borderTop: '1px solid var(--pf-border)', padding: '5px 8px', background: 'rgba(0,0,0,0.15)' }}>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: '7px', color: 'var(--pf-text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          Cola ({queue.length})
+                        </div>
+                        {queue.map((item, qi) => {
+                          const recipe = item.recipe || item.assemble?.recipe || item.name || '?';
+                          const count  = item.count || item.amount || 1;
+                          const rd     = VALANNIA_RECIPES[recipe];
+                          const outputs = rd?.o || [];
+                          return (
+                            <div key={qi} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' }}>
+                              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '7px', color: 'var(--pf-text-muted)', flexShrink: 0 }}>{qi + 1}.</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flex: 1, overflow: 'hidden' }}>
+                                {outputs.slice(0,2).map(p => {
+                                  const tk = tokensConfig.find(t => t.name === p);
+                                  const img = nftImages[p] || tk?.image || null;
+                                  return img
+                                    ? <img key={p} src={img} alt={p} width="12" height="12" style={{ objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pf-border)' }} onError={e => { e.target.style.display='none'; }} />
+                                    : null;
+                                })}
+                                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '8px', color: 'var(--pf-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {outputs.join(' · ') || recipe}
+                                </span>
+                              </div>
+                              {count > 1 && <span style={{ fontFamily: 'var(--font-heading)', fontSize: '8px', color: 'var(--pf-orange)', fontWeight: 700, flexShrink: 0 }}>×{count}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -2286,7 +2420,7 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
 
               {/* Explorador de recetas */}
               <div style={{ flexGrow: 1, minHeight: 0 }}>
-                <RecipeExplorer hero={heroSeleccionado} />
+                <RecipeExplorer hero={heroSeleccionado} tokensConfig={tokensConfig} nftImages={nftImages} />
               </div>
             </>
           )}
@@ -2636,7 +2770,7 @@ function VistaBacklog({ t, tokensConfig = [], nftImages = {} }) {
 }
 
 
-function VistaRecetas({ t }) {
+function VistaRecetas({ t, tokensConfig = [] }) {
   const [search, setSearch] = React.useState('');
   const [profFilter, setProfFilter] = React.useState('');
   const [sel, setSel] = React.useState(null);
@@ -2723,8 +2857,20 @@ function VistaRecetas({ t }) {
                   <span style={{ fontSize: '9px', color: 'var(--pf-text-muted)', flexShrink: 0, marginLeft: '6px' }}>Lv{rv.l} · {fmtTime(rv.s)}</span>
                 </div>
                 {rv.o.length > 0 && (
-                  <div style={{ fontSize: '9px', color: 'var(--pf-text-muted)', marginTop: '1px' }}>
-                    {rv.o.map(p => <span key={p} style={{ marginRight: '6px' }}>{prodIcon(p)} {p}</span>)}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '3px' }}>
+                    {rv.o.map(p => {
+                      const tk = tokensConfig.find(t => t.name === p);
+                      const img = tk?.image || null;
+                      return (
+                        <span key={p} style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '9px', color: 'var(--pf-gold)' }}>
+                          {img
+                            ? <img src={img} alt={p} width="12" height="12" style={{ objectFit: 'cover', flexShrink: 0, border: '1px solid var(--pf-border)' }} onError={e => { e.target.style.display='none'; }} />
+                            : <span style={{ fontSize: '8px', opacity: 0.6 }}>✦</span>
+                          }
+                          {p}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </button>
@@ -2884,8 +3030,8 @@ function MainApp() {
                   <div style={{ flexGrow: 1, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {vistaActiva === 'inventario' && <VistaInventario cuentas={cuentas} setCuentas={setCuentas} tokensConfig={tokensConfig} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} onNftImages={setNftImages} />}
                     {vistaActiva === 'mercado' && <VistaMercado tokensConfig={tokensConfig} burner={burner} cuentas={cuentas} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} db={db} />}
-                    {vistaActiva === 'crafteo' && <VistaCrafteo cuentas={cuentas} burner={burner} t={t} />}
-                    {vistaActiva === 'recetas' && <VistaRecetas t={t} />}
+                    {vistaActiva === 'crafteo' && <VistaCrafteo cuentas={cuentas} burner={burner} t={t} tokensConfig={tokensConfig} nftImages={nftImages} />}
+                    {vistaActiva === 'recetas' && <VistaRecetas t={t} tokensConfig={tokensConfig} />}
                     {vistaActiva === 'backlog' && <VistaBacklog t={t} tokensConfig={tokensConfig} nftImages={nftImages} />}
                   </div>
                 </main>
