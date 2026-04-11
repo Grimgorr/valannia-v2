@@ -2028,6 +2028,24 @@ const HERO_META = {
   'Zorvan':{'cat':'beyond-heroes','slug':'zorvan'},
 };
 
+class HeroErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('[Heroes] render error:', error, info); }
+  render() {
+    if (this.state.hasError) return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px', padding: '40px' }}>
+        <div style={{ fontSize: '36px' }}>⚠️</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', color: 'var(--pf-orange)', letterSpacing: '0.1em' }}>Error rendering heroes</div>
+        <div style={{ fontSize: '12px', color: 'var(--pf-text-muted)', maxWidth: '400px', textAlign: 'center' }}>{this.state.error?.message}</div>
+        <button onClick={() => this.setState({ hasError: false, error: null })} className="axon-btn-secondary" style={{ fontSize: '11px', padding: '8px 20px' }}>Retry</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+
 function getHeroImg(kind, border) {
   const m = HERO_META[kind];
   if (!m) return null;
@@ -2181,24 +2199,23 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
 
           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
             {misHeroes.map((h) => {
+              // Guard against malformed hero data
+              if (!h?.item?.attributes?.hero) return null;
               const hero = h.item.attributes.hero;
               const border = borderColor[hero.border] || 'var(--pf-border)';
               const isSelected = heroSeleccionado?.id === h.id;
-              const maxHealth = h.trollHealth || 2500;
-              const healthPct = Math.min(100, (h.health / 140) * 100);
+              const healthPct = Math.min(100, ((h.health || 0) / 140) * 100);
               // Mastery de la profesión activa
-              const profKey = hero.profession.toLowerCase();
-              const activeMastery = h.masteries?.[profKey]?.mastery ?? hero.mastery;
+              const profKey = (hero.profession || '').toLowerCase();
+              const activeMastery = h.masteries?.[profKey]?.mastery ?? hero.mastery ?? 0;
               // Vortex countdown
               const vortexEnd = h.vortex ? new Date(h.vortex) : null;
               const now = new Date();
               const inVortex = vortexEnd && vortexEnd > now;
               const vortexMins = inVortex ? Math.ceil((vortexEnd - now) / 60000) : 0;
-              // Imagen real del hero desde metadata S3
-              const imgSeed = h.item.kind;
               return (
                 <div key={h.id} className="hero-card" onClick={() => setHeroSeleccionado(isSelected ? null : h)}
-                  style={{ border: `2px solid ${isSelected ? 'var(--pf-orange)' : border}`, cursor: 'pointer', transition: 'border-color 0.2s', position: 'relative', opacity: inVortex ? 0.75 : 1 }}>
+                  style={{ border: `2px solid ${isSelected ? 'var(--pf-orange)' : border}`, cursor: 'pointer', transition: 'all 0.2s', position: 'relative', opacity: inVortex ? 0.75 : 1, background: isSelected ? 'rgba(255,107,26,0.08)' : '', boxShadow: isSelected ? '0 0 18px rgba(255,107,26,0.2)' : '' }}>
                   {/* Badge border */}
                   <div style={{ position: 'absolute', top: '8px', right: '8px', fontSize: '9px', fontWeight: 'bold', color: border, border: `1px solid ${border}`, padding: '2px 6px', background: 'var(--pf-bg)' }}>{hero.border}</div>
                   {/* Vortex badge */}
@@ -2259,7 +2276,7 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
                     // Cantidad: assemble.action.craft.duration vs recipe seconds → count = duration / recipe.s
                     const craftDuration = assemble.action?.craft?.duration || 0;
                     const recipeSecs    = recipeData?.s || 0;
-                    const craftCount    = (craftDuration && recipeSecs) ? Math.round(craftDuration / recipeSecs) : null;
+                    const craftCount    = (craftDuration && recipeSecs && craftDuration >= recipeSecs) ? Math.round(craftDuration / recipeSecs) : 1;
                     const produces = recipeData?.o?.length ? recipeData.o.join(' · ') : null;
                     // Nivel de profesión del héroe (1-12)
                     const profLevel = hero.level || null;
@@ -2323,7 +2340,7 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
 
                   {/* Cola de crafteo */}
                   {(() => {
-                    const queue = heroQueues[h.id] || [];
+                    const queue = (heroQueues && h?.id) ? (heroQueues[h.id] || []) : [];
                     if (queue.length === 0) return null;
                     return (
                       <div style={{ borderTop: '1px solid var(--pf-border)', padding: '5px 8px', background: 'rgba(0,0,0,0.15)' }}>
@@ -2372,6 +2389,7 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
               {/* Header héroe */}
               {(() => {
                 const h = heroSeleccionado;
+                if (!h?.item?.attributes?.hero) return null;
                 const hero = h.item.attributes.hero;
                 const borderCol = { Gold: 'var(--pf-gold)', Silver: '#A8A8B3', Bronze: '#CD7F32' }[hero.border] || 'var(--pf-border)';
                 const profKey = hero.profession.toLowerCase();
@@ -2937,13 +2955,13 @@ function MainApp() {
   const [burner, setBurner] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isAppLaunched, setIsAppLaunched] = useState(false);
-  const [tieneAcceso, setTieneAcceso] = useState(false);
+
   const [cuentas, setCuentas] = useState(() => JSON.parse(localStorage.getItem('valanniaCuentas') || '[]'));
   const [vistaActiva, setVistaActiva] = useState('inventario');
   const [nftImages, setNftImages] = useState({}); // kind → image url, built from loaded inventories
 
   useEffect(() => {
-    if (localStorage.getItem("acceso_beta_concedido") === "true") setTieneAcceso(true);
+
     fetch(JSON_URL).then(res => res.json()).then(data => setTokensConfig(extractTokens(data)));
   }, []);
 
@@ -2959,8 +2977,6 @@ function MainApp() {
           
           {!isAppLaunched ? (
              <VistaHome onLaunchApp={() => setIsAppLaunched(true)} lang={lang} setLang={setLang} t={t} />
-          ) : !tieneAcceso ? (
-             <PantallaBloqueo onAccesoConcedido={() => setTieneAcceso(true)} t={t} />
           ) : (
             <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 10 }}>
               <nav className="glass-card" style={{ margin: '15px 20px 0 20px', padding: '12px 25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3030,7 +3046,7 @@ function MainApp() {
                   <div style={{ flexGrow: 1, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {vistaActiva === 'inventario' && <VistaInventario cuentas={cuentas} setCuentas={setCuentas} tokensConfig={tokensConfig} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} onNftImages={setNftImages} />}
                     {vistaActiva === 'mercado' && <VistaMercado tokensConfig={tokensConfig} burner={burner} cuentas={cuentas} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} db={db} />}
-                    {vistaActiva === 'crafteo' && <VistaCrafteo cuentas={cuentas} burner={burner} t={t} tokensConfig={tokensConfig} nftImages={nftImages} />}
+                    {vistaActiva === 'crafteo' && <HeroErrorBoundary><VistaCrafteo cuentas={cuentas} burner={burner} t={t} tokensConfig={tokensConfig} nftImages={nftImages} /></HeroErrorBoundary>}
                     {vistaActiva === 'recetas' && <VistaRecetas t={t} tokensConfig={tokensConfig} />}
                     {vistaActiva === 'backlog' && <VistaBacklog t={t} tokensConfig={tokensConfig} nftImages={nftImages} />}
                   </div>
