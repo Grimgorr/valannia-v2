@@ -96,7 +96,7 @@ const useTranslation = () => useContext(LanguageContext);
 
 const TRANSLATIONS = {
   es: {
-    menuInventory: "Inventario", menuMarket: "Mercado P2P", menuCrafting: "Héroes", menuRecipes: "Crafteo",
+    menuInventory: "Inventario", menuMarket: "Mercado P2P", menuCrafting: "Héroes", menuRecipes: "Crafteo", menuBacklog: "Claimeo Recursos",
     betaTitle: "Acceso Beta", betaDesc: "Introduce el código para acceder a la infraestructura de Axon.",
     betaPlaceholder: "Código de acceso...", betaBtn: "Acceder", betaErr: "Código incorrecto.",
     burnExportAlert: "¡Clave Privada copiada al portapapeles!\n\nGuárdala en un lugar seguro.",
@@ -139,7 +139,7 @@ const TRANSLATIONS = {
     homeCtaTitle: "Entra Temprano", homeCtaMain: "Fase Beta Activa", homeCtaSub: "Únete a la fase de pruebas cerrada de la infraestructura Axon."
   },
   en: {
-    menuInventory: "Inventory", menuMarket: "P2P Market", menuCrafting: "Heroes", menuRecipes: "Crafting",
+    menuInventory: "Inventory", menuMarket: "P2P Market", menuCrafting: "Heroes", menuRecipes: "Crafting", menuBacklog: "Claim Resources",
     betaTitle: "Beta Access", betaDesc: "Enter code to access Axon infrastructure.",
     betaPlaceholder: "Access code...", betaBtn: "Enter", betaErr: "Incorrect code.",
     burnExportAlert: "Private Key copied!\n\nStore it safely.",
@@ -633,7 +633,7 @@ if (existing) {
   );
 }
 
-function VistaInventario({ cuentas, setCuentas, tokensConfig, triggerRefresh, refreshTrigger, t }) {
+function VistaInventario({ cuentas, setCuentas, tokensConfig, triggerRefresh, refreshTrigger, t, onNftImages }) {
   const { connection } = useConnection();
   const wallet = useWallet();
   const toast = useToast();
@@ -645,7 +645,19 @@ function VistaInventario({ cuentas, setCuentas, tokensConfig, triggerRefresh, re
   const [isExecuting, setIsExecuting] = useState(false);
 
   const cuentasRender = useMemo(() => cuentas, [cuentas]);
-  const handleUpdateData = useCallback((dir, ali, agr, tot) => { setInventariosGuardados(prev => ({ ...prev, [dir]: { direccion: dir, alias: ali, agrupado: agr, totalItems: tot } })); }, []);
+  const handleUpdateData = useCallback((dir, ali, agr, tot) => {
+    setInventariosGuardados(prev => ({ ...prev, [dir]: { direccion: dir, alias: ali, agrupado: agr, totalItems: tot } }));
+    // Construir mapa kind→image para NFTs Core y pasarlo al App
+    if (onNftImages && agr) {
+      const map = {};
+      Object.values(agr).forEach(subcats => {
+        Object.values(subcats).forEach(items => {
+          items.forEach(item => { if (item.image && item.name) map[item.name] = item.image; });
+        });
+      });
+      onNftImages(prev => ({ ...prev, ...map }));
+    }
+  }, [onNftImages]);
 
 const ejecutarLogistica = async () => {
   if (carrito.length === 0 || !destinoSeleccionado) return;
@@ -1236,6 +1248,7 @@ function VistaMercado({ tokensConfig, burner, cuentas, triggerRefresh, refreshTr
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
         select optgroup { background: #1a1208; color: var(--pf-gold); font-weight: bold; font-style: normal; font-size: 10px; letter-spacing: 0.05em; }
         select option { background: #120d05; color: #c8b89a; }
         select option:hover, select option:checked { background: #2a1f0a; }
@@ -2283,6 +2296,346 @@ fetchHeroes(token); // llamada directa sin esperar al useEffect
   );
 }
 
+function VistaBacklog({ t, tokensConfig = [], nftImages = {} }) {
+  const wallet  = useWallet();
+  const { connection } = useConnection();
+  const toast   = useToast();
+  const PROXY   = 'https://valannia-proxy.polarisfuel.workers.dev';
+
+  const [valanToken, setValanToken]   = useState(() => localStorage.getItem('valannia_v_token') || null);
+  const [backlog, setBacklog]         = useState(null);   // { id, description, actions[] }
+  const [selected, setSelected]       = useState({});     // { index: true/false }
+  const [isLoading, setIsLoading]     = useState(false);
+  const [isClaiming, setIsClaiming]   = useState(false);
+  const [status, setStatus]           = useState('');     // texto de progreso
+
+  const lang = t('lang') === 'en' ? 'en' : 'es';
+
+  // ── Auth Valannia (igual que VistaCrafteo) ────────────────────────────
+  const conectarValannia = async () => {
+    if (!wallet.connected) { toast(lang === 'en' ? 'Connect your wallet first.' : 'Conecta tu wallet primero.', 'error'); return; }
+    setIsLoading(true);
+    try {
+      let device = localStorage.getItem('valannia_device');
+      if (!device) { device = crypto.randomUUID(); localStorage.setItem('valannia_device', device); }
+      const challengeRes = await fetch(`${PROXY}/user/authentication/solana/challenge`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application: 'Valannia Portal', device, wallet: wallet.publicKey.toBase58() }),
+      });
+      const challengeData = await challengeRes.json();
+      const challenge = typeof challengeData.result === 'string' ? challengeData.result : challengeData.result?.challenge;
+      if (!challenge) throw new Error('No challenge received.');
+      const encoded = new TextEncoder().encode(challenge);
+      const signatureBytes = await wallet.signMessage(encoded);
+      const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+      let num = BigInt(0);
+      for (const byte of signatureBytes) { num = num * 256n + BigInt(byte); }
+      let signature = '';
+      while (num > 0n) { signature = ALPHABET[Number(num % 58n)] + signature; num = num / 58n; }
+      for (const byte of signatureBytes) { if (byte !== 0) break; signature = '1' + signature; }
+      const authRes = await fetch(`${PROXY}/user/authentication/solana/authenticate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge, mode: { direct: { device, application: 'Valannia Portal' } }, verification: { message: signature } }),
+      });
+      const authData = await authRes.json();
+      const token = authData.result?.token;
+      if (!token) throw new Error('No token received.');
+      localStorage.setItem('valannia_v_token', token);
+      setValanToken(token);
+      toast(lang === 'en' ? 'Connected to Valannia ✓' : 'Conectado a Valannia ✓', 'success');
+    } catch (e) { toast('Error: ' + e.message, 'error'); }
+    setIsLoading(false);
+  };
+
+  const desconectar = () => { localStorage.removeItem('valannia_v_token'); setValanToken(null); setBacklog(null); setSelected({}); };
+
+  // ── Cargar backlog ────────────────────────────────────────────────────
+  const fetchBacklog = useCallback(async () => {
+    if (!valanToken) return;
+    setIsLoading(true);
+    try {
+      const res  = await fetch(`${PROXY}/backlog/get`, {
+        headers: { 'x-auth-token': valanToken, 'Authorization': `Bearer ${valanToken}` },
+      });
+      const data = await res.json();
+      if (data.state === 'Ok' && data.result) {
+        setBacklog(data.result);
+        // Seleccionar todos por defecto
+        const sel = {};
+        (data.result.actions || []).forEach((_, i) => { sel[i] = true; });
+        setSelected(sel);
+      } else if (data.code === 'NoBacklog' || data.statusCode === 404) {
+        setBacklog({ id: null, actions: [] });
+      } else {
+        throw new Error(data.message || 'Error loading backlog');
+      }
+    } catch (e) { toast('Error: ' + e.message, 'error'); }
+    setIsLoading(false);
+  }, [valanToken]);
+
+  useEffect(() => { fetchBacklog(); }, [fetchBacklog]);
+
+  // ── Claimear items seleccionados ──────────────────────────────────────
+  const ejecutarClaim = async () => {
+    if (!valanToken) { toast(lang === 'en' ? 'Connect to Valannia first.' : 'Conecta Valannia primero.', 'error'); return; }
+    if (!wallet.connected) { toast(lang === 'en' ? 'Connect your wallet.' : 'Conecta tu wallet.', 'error'); return; }
+    if (!backlog?.actions?.length) return;
+
+    const actions = backlog.actions.filter((_, i) => selected[i]);
+    if (actions.length === 0) { toast(lang === 'en' ? 'Select at least one item.' : 'Selecciona al menos un item.', 'error'); return; }
+
+    setIsClaiming(true);
+    const hdrs = { 'x-auth-token': valanToken, 'Authorization': `Bearer ${valanToken}` };
+
+    try {
+      // ── Paso 1: Request ───────────────────────────────────────────────
+      setStatus(lang === 'en' ? 'Requesting claim...' : 'Solicitando claim...');
+      const reqRes = await fetch(`${PROXY}/backlog/request`, {
+        method: 'POST',
+        headers: { ...hdrs, 'Content-Type': 'application/json' },
+        body: JSON.stringify(actions),
+      });
+      const reqData = await reqRes.json();
+      if (reqData.state !== 'Ok' && !reqData.result) throw new Error(reqData.message || JSON.stringify(reqData));
+      // result es directamente el string base64 de la tx (no un objeto)
+      const txBase64  = typeof reqData.result === 'string' ? reqData.result : reqData.result?.transaction;
+      const backlogId = reqData.result?.id || backlog.id;
+      if (!txBase64) throw new Error('No transaction received from server');
+
+      // ── Paso 2: Firmar la tx con el wallet ────────────────────────────
+      setStatus(lang === 'en' ? 'Sign in your wallet...' : 'Firma en tu wallet...');
+      const txBytes = Uint8Array.from(atob(txBase64), c => c.charCodeAt(0));
+      // La tx del backlog es VersionedTransaction (empieza con version byte 0)
+      const tx = VersionedTransaction.deserialize(txBytes);
+      const signedTx     = await wallet.signTransaction(tx);
+      const signedBase64 = btoa(String.fromCharCode(...signedTx.serialize()));
+
+      // ── Paso 3: Provide (enviar tx firmada) ───────────────────────────
+      setStatus(lang === 'en' ? 'Sending signed transaction...' : 'Enviando transacción firmada...');
+      const provRes = await fetch(`${PROXY}/backlog/provide`, {
+        method: 'POST',
+        headers: { ...hdrs, 'Content-Type': 'text/plain' },
+        body: signedBase64,
+      });
+      const provData = await provRes.json();
+      if (provData.state !== 'Ok' && provData.statusCode >= 400) throw new Error(provData.message || 'Provide failed');
+
+      // ── Paso 4: Complete ──────────────────────────────────────────────
+      setStatus(lang === 'en' ? 'Completing claim...' : 'Completando claim...');
+      const compRes = await fetch(`${PROXY}/backlog/complete?id=${encodeURIComponent(backlogId)}`, {
+        headers: { ...hdrs, 'Content-Type': 'application/json' },
+      });
+      const compData = await compRes.json();
+      if (compData.state !== 'Ok' && compData.statusCode >= 400) throw new Error(compData.message || 'Complete failed');
+
+      toast(lang === 'en' ? '✓ Items claimed successfully!' : '✓ ¡Items reclamados con éxito!', 'success');
+      setStatus('');
+      await fetchBacklog(); // Recargar backlog
+    } catch (e) {
+      toast('Error: ' + e.message, 'error');
+      setStatus('');
+    }
+    setIsClaiming(false);
+  };
+
+  // ── Helpers UI ────────────────────────────────────────────────────────
+  const actionLabel = (action) => {
+    if (action.stackable) return `${action.stackable.kind}  ×${action.stackable.amount}`;
+    if (action.unique?.specific) return `${action.unique.specific.kind}  #${action.unique.specific.sequence}`;
+    if (action.unique?.some) return `${action.unique.some.kind}`;
+    if (action.unique?.create) return `${action.unique.create.kind}  (new)`;
+    return JSON.stringify(action);
+  };
+
+  const selectedCount = Object.values(selected).filter(Boolean).length;
+
+  // ── Render ────────────────────────────────────────────────────────────
+  if (!wallet.connected) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px' }}>
+      <div style={{ fontSize: '48px' }}>🎁</div>
+      <p style={{ color: 'var(--pf-text-muted)', fontFamily: 'var(--font-heading)', letterSpacing: '0.1em', fontSize: '12px', textTransform: 'uppercase' }}>
+        {lang === 'en' ? 'Connect your wallet to continue' : 'Conecta tu wallet para continuar'}
+      </p>
+    </div>
+  );
+
+  if (!valanToken) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '20px' }}>
+      <div style={{ fontSize: '48px' }}>🎁</div>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', color: 'var(--pf-gold-light)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        {lang === 'en' ? 'Claim Resources' : 'Claimeo Recursos'}
+      </div>
+      <p style={{ color: 'var(--pf-text-muted)', fontSize: '13px', maxWidth: '340px', textAlign: 'center', lineHeight: '1.7' }}>
+        {lang === 'en'
+          ? 'Connect your Valannia account to see your pending claims.'
+          : 'Conecta tu cuenta de Valannia para ver tus claims pendientes.'}
+      </p>
+      <button onClick={conectarValannia} disabled={isLoading} className="axon-btn-primary" style={{ padding: '10px 28px', fontSize: '11px' }}>
+        <span>{isLoading ? '...' : (lang === 'en' ? '🔗 Connect Valannia' : '🔗 Conectar Valannia')}</span>
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '25px', gap: '20px', overflowY: 'auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--pf-border)', paddingBottom: '15px' }}>
+        <div>
+          <h2 style={{ margin: 0, fontFamily: 'var(--font-heading)', color: 'var(--pf-gold-light)', fontSize: '16px', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            🎁 {lang === 'en' ? 'Claim Resources' : 'Claimeo Recursos'}
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#4CAF50', boxShadow: '0 0 6px #4CAF50' }}></span>
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: '9px', color: 'var(--pf-text-muted)', letterSpacing: '0.1em' }}>
+              {lang === 'en' ? 'VALANNIA CONNECTED' : 'VALANNIA CONECTADO'}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={fetchBacklog} disabled={isLoading} className="axon-btn-secondary" style={{ padding: '6px 12px', fontSize: '10px' }}>
+            {isLoading ? '...' : '↻'}
+          </button>
+          <button onClick={desconectar} className="axon-btn-secondary" style={{ padding: '6px 12px', fontSize: '10px' }}>
+            {lang === 'en' ? 'Disconnect' : 'Desconectar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Contenido */}
+      {isLoading && !backlog ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: '16px' }}>
+          <div style={{ width: '32px', height: '32px', border: '2px solid var(--pf-orange)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span style={{ color: 'var(--pf-text-muted)', fontFamily: 'var(--font-heading)', fontSize: '10px', letterSpacing: '0.2em' }}>
+            {lang === 'en' ? 'LOADING BACKLOG...' : 'CARGANDO BACKLOG...'}
+          </span>
+        </div>
+      ) : !backlog || backlog.actions.length === 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: '12px' }}>
+          <div style={{ fontSize: '48px', opacity: 0.3 }}>📭</div>
+          <p style={{ color: 'var(--pf-text-muted)', fontFamily: 'var(--font-heading)', fontSize: '11px', letterSpacing: '0.2em', textTransform: 'uppercase', margin: 0 }}>
+            {lang === 'en' ? 'No pending claims' : 'Sin claims pendientes'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Contador + acciones rápidas */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ background: 'var(--pf-orange)', color: '#000', fontFamily: 'var(--font-heading)', fontSize: '10px', fontWeight: 700, padding: '3px 10px', borderRadius: '2px' }}>
+                {backlog.actions.length}
+              </span>
+              <span style={{ color: 'var(--pf-text-muted)', fontFamily: 'var(--font-heading)', fontSize: '10px', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+                {lang === 'en' ? 'items pending' : 'items pendientes'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button onClick={() => { const s = {}; backlog.actions.forEach((_, i) => { s[i] = true; }); setSelected(s); }}
+                className="axon-btn-secondary" style={{ fontSize: '9px', padding: '4px 10px', letterSpacing: '0.1em' }}>
+                {lang === 'en' ? 'ALL' : 'TODO'}
+              </button>
+              <button onClick={() => setSelected({})}
+                className="axon-btn-secondary" style={{ fontSize: '9px', padding: '4px 10px', letterSpacing: '0.1em' }}>
+                {lang === 'en' ? 'NONE' : 'NINGUNO'}
+              </button>
+            </div>
+          </div>
+
+          {/* Grid de items — 3-4 columnas, lista estilo original con imagen */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px' }}>
+            {backlog.actions.map((action, i) => {
+              const kind   = action.stackable?.kind || action.unique?.specific?.kind || action.unique?.some?.kind || action.unique?.create?.kind || '?';
+              const amount = action.stackable?.amount || null;
+              const seq    = action.unique?.specific?.sequence || null;
+              const isUniq = !!action.unique;
+              // Buscar imagen: 1) nftImages (Core NFTs cargados del inventario), 2) tokensConfig (SPL)
+              const tokenMatch = tokensConfig.find(tk => tk.name === kind);
+              const imgUrl   = nftImages[kind] || tokenMatch?.image || 'https://portal.valannia.com/assets/itemTemp-CCNXAqFn.webp';
+              const fallback = 'https://portal.valannia.com/assets/itemTemp-CCNXAqFn.webp';
+              const sel      = !!selected[i];
+
+              return (
+                <div key={i}
+                  onClick={() => setSelected(s => ({ ...s, [i]: !s[i] }))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '8px 12px', cursor: 'pointer',
+                    background: sel ? 'rgba(255,107,26,0.08)' : 'rgba(0,0,0,0.2)',
+                    border: `1px solid ${sel ? 'var(--pf-orange)' : 'var(--pf-border)'}`,
+                    transition: 'all 0.12s',
+                  }}>
+                  {/* Checkbox */}
+                  <div style={{
+                    width: '14px', height: '14px', flexShrink: 0,
+                    border: `2px solid ${sel ? 'var(--pf-orange)' : 'var(--pf-border)'}`,
+                    background: sel ? 'var(--pf-orange)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.12s',
+                  }}>
+                    {sel && <span style={{ color: '#000', fontSize: '9px', fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                  </div>
+                  {/* Imagen del item */}
+                  <div style={{
+                    width: '32px', height: '32px', flexShrink: 0,
+                    border: `1px solid ${sel ? 'rgba(255,107,26,0.35)' : 'var(--pf-border)'}`,
+                    background: 'rgba(0,0,0,0.35)', overflow: 'hidden',
+                  }}>
+                    <img src={imgUrl} alt={kind}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={e => { e.target.onerror = null; e.target.src = fallback; }}
+                    />
+                  </div>
+                  {/* Nombre */}
+                  <span style={{
+                    fontFamily: 'var(--font-heading)', fontSize: '11px', flex: 1,
+                    color: sel ? 'var(--pf-gold)' : 'var(--pf-text-muted)',
+                    letterSpacing: '0.05em', textTransform: 'uppercase',
+                    transition: 'color 0.12s', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{kind}</span>
+                  {/* Badge cantidad */}
+                  {amount !== null && (
+                    <span style={{
+                      fontFamily: 'var(--font-heading)', fontSize: '11px', fontWeight: 700, flexShrink: 0,
+                      color: sel ? 'var(--pf-orange)' : 'var(--pf-text-muted)',
+                    }}>×{amount}</span>
+                  )}
+                  {isUniq && seq !== null && (
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: '9px', color: 'var(--pf-gold)', flexShrink: 0 }}>#{seq}</span>
+                  )}
+                  {isUniq && seq === null && (
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: '9px', color: 'var(--pf-gold)', flexShrink: 0 }}>NFT</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Status de progreso */}
+          {status && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,107,26,0.06)', border: '1px solid var(--pf-orange)', padding: '12px 18px' }}>
+              <div style={{ width: '14px', height: '14px', border: '2px solid var(--pf-orange)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '10px', color: 'var(--pf-orange)', letterSpacing: '0.1em' }}>{status}</span>
+            </div>
+          )}
+
+          {/* Botón claim */}
+          <button
+            onClick={ejecutarClaim}
+            disabled={isClaiming || selectedCount === 0}
+            className="axon-btn-primary"
+            style={{ padding: '14px', fontSize: '11px', letterSpacing: '0.15em', opacity: (isClaiming || selectedCount === 0) ? 0.4 : 1 }}>
+            <span>
+              {isClaiming
+                ? (lang === 'en' ? 'PROCESSING...' : 'PROCESANDO...')
+                : `🎁  ${lang === 'en' ? `CLAIM ${selectedCount} ITEM${selectedCount !== 1 ? 'S' : ''}` : `CLAIMEAR ${selectedCount} ITEM${selectedCount !== 1 ? 'S' : ''}`}`}
+            </span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 function VistaRecetas({ t }) {
   const [search, setSearch] = React.useState('');
   const [profFilter, setProfFilter] = React.useState('');
@@ -2441,6 +2794,7 @@ function MainApp() {
   const [tieneAcceso, setTieneAcceso] = useState(false);
   const [cuentas, setCuentas] = useState(() => JSON.parse(localStorage.getItem('valanniaCuentas') || '[]'));
   const [vistaActiva, setVistaActiva] = useState('inventario');
+  const [nftImages, setNftImages] = useState({}); // kind → image url, built from loaded inventories
 
   useEffect(() => {
     if (localStorage.getItem("acceso_beta_concedido") === "true") setTieneAcceso(true);
@@ -2507,6 +2861,9 @@ function MainApp() {
                   <button className={`sidebar-btn ${vistaActiva === 'recetas' ? 'active' : ''}`} onClick={() => setVistaActiva('recetas')}>
                     <span style={{marginRight: '10px', fontSize: '16px', filter: 'sepia(1) hue-rotate(15deg) contrast(0.8)'}}>🔨</span> {t('menuRecipes')}
                   </button>
+                  <button className={`sidebar-btn ${vistaActiva === 'backlog' ? 'active' : ''}`} onClick={() => setVistaActiva('backlog')}>
+                    <span style={{marginRight: '10px', fontSize: '16px', filter: 'sepia(1) hue-rotate(15deg) contrast(0.8)'}}>🎁</span> {t('menuBacklog')}
+                  </button>
 
                   <div style={{ marginTop: 'auto', textAlign: 'center', color: 'var(--pf-text-muted)', fontSize: '12px', paddingTop: '20px', borderTop: '1px solid var(--pf-border)' }}>
                     <p style={{ margin: '0 0 12px 0', lineHeight: '1.5' }}>
@@ -2525,10 +2882,11 @@ function MainApp() {
 
                 <main style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <div style={{ flexGrow: 1, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-                    {vistaActiva === 'inventario' && <VistaInventario cuentas={cuentas} setCuentas={setCuentas} tokensConfig={tokensConfig} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} />}
+                    {vistaActiva === 'inventario' && <VistaInventario cuentas={cuentas} setCuentas={setCuentas} tokensConfig={tokensConfig} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} onNftImages={setNftImages} />}
                     {vistaActiva === 'mercado' && <VistaMercado tokensConfig={tokensConfig} burner={burner} cuentas={cuentas} triggerRefresh={triggerRefresh} refreshTrigger={refreshTrigger} t={t} db={db} />}
                     {vistaActiva === 'crafteo' && <VistaCrafteo cuentas={cuentas} burner={burner} t={t} />}
                     {vistaActiva === 'recetas' && <VistaRecetas t={t} />}
+                    {vistaActiva === 'backlog' && <VistaBacklog t={t} tokensConfig={tokensConfig} nftImages={nftImages} />}
                   </div>
                 </main>
               </div>
