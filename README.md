@@ -1,7 +1,7 @@
 # Polaris Fuel · Wallet Manager
 
 
-Free, open-source wallet management tool for the **Valannia** Web3 game ecosystem on Solana. Officially endorsed by **Mystic Sun Studio**, the developers of Valannia.
+Free, open-source wallet management tool for the **Valannia** Web3 game ecosystem on Solana.
 
 Manage multiple player wallets, move assets, trade with other players, craft items and claim in-game rewards — all from a single interface. No registration. No fees. Connect your Solana wallet and go.
 
@@ -45,6 +45,6 @@ No private keys are ever requested or stored. All transaction signing happens in
 
 ## About
 
-Built by [Polaris Fuel Alliance](https://polarisfuel.app) · Free community tool · Officially endorsed by [Mystic Sun Studio](https://valannia.com)
+Built by [Polaris Fuel Alliance](https://polarisfuel.app) · Free community tool (https://valannia.com)
 
 MIT License
